@@ -166,10 +166,10 @@ export class CarModel {
                 const physical: MeshPhysicalMaterial = source as MeshPhysicalMaterial
                 if (physical.isMeshPhysicalMaterial) physical.transmission = 0
                 source.transparent = true
-                source.opacity = 0.42
+                source.opacity = this.look.glass.opacity
                 source.roughness = 0.02
                 source.metalness = 0
-                source.envMapIntensity = 1.6
+                source.envMapIntensity = this.look.glass.reflection
                 source.depthWrite = false
             } else if (this.look.chrome_materials.indexOf(name) >= 0) {
                 source.envMapIntensity = 1.5

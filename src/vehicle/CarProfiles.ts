@@ -50,6 +50,8 @@ export interface CarLook {
     headlight: { x: number, y: number, inset: number }
     /** Taillight glow position: half track, height and offset forward from the tail, m */
     taillight: { x: number, y: number, inset: number }
+    /** Window glass opacity and environment reflection strength: a high value hazes the cockpit view */
+    glass: { opacity: number, reflection: number }
     /** Driver's eye for the cockpit camera: offset back from the car center (negative is forward) and height, m */
     cockpit: CockpitView
 }
@@ -104,6 +106,7 @@ export const CAR_PROFILES: Record<CarId, CarProfile> = {
             opaque_lamps: false,
             headlight: { x: 0.62, y: 0.72, inset: -0.05 },
             taillight: { x: 0.6, y: 0.75, inset: -0.9 },
+            glass: { opacity: 0.42, reflection: 1.6 },
             cockpit: { distance: -0.35, height: 1.12, look_height: 1.0 },
         },
     },
@@ -142,6 +145,8 @@ export const CAR_PROFILES: Record<CarId, CarProfile> = {
             // Behind and below the cabin: point lights cast no shadows and would tint the seats through the glass
             taillight: { x: 0.55, y: 0.3, inset: -1.1 },
             // Tall cabin far behind a long hood: the eye sits over the front bench, above the dashboard at ~1.2 m
+            // Large flat windows close to the eye: almost clear glass, reflections only at grazing angles
+            glass: { opacity: 0.12, reflection: 0.7 },
             cockpit: { distance: 0.3, height: 1.4, look_height: 1.25 },
         },
     },
