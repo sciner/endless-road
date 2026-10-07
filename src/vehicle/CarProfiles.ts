@@ -50,6 +50,15 @@ export interface CarLook {
     headlight: { x: number, y: number, inset: number }
     /** Taillight glow position: half track, height and offset forward from the tail, m */
     taillight: { x: number, y: number, inset: number }
+    /** Driver's eye for the cockpit camera: offset back from the car center (negative is forward) and height, m */
+    cockpit: CockpitView
+}
+
+export interface CockpitView {
+    distance: number
+    height: number
+    /** Height of the aim point 12 m ahead: sets how much of the dashboard stays in view */
+    look_height: number
 }
 
 export interface CarProfile {
@@ -95,6 +104,7 @@ export const CAR_PROFILES: Record<CarId, CarProfile> = {
             opaque_lamps: false,
             headlight: { x: 0.62, y: 0.72, inset: -0.05 },
             taillight: { x: 0.6, y: 0.75, inset: -0.9 },
+            cockpit: { distance: -0.35, height: 1.12, look_height: 1.0 },
         },
     },
     vintage: {
@@ -131,6 +141,8 @@ export const CAR_PROFILES: Record<CarId, CarProfile> = {
             headlight: { x: 0.62, y: 0.92, inset: 0.35 },
             // Behind and below the cabin: point lights cast no shadows and would tint the seats through the glass
             taillight: { x: 0.55, y: 0.3, inset: -1.1 },
+            // Tall cabin far behind a long hood: the eye sits over the front bench, above the dashboard at ~1.2 m
+            cockpit: { distance: 0.3, height: 1.4, look_height: 1.25 },
         },
     },
 }

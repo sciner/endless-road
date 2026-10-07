@@ -1,6 +1,7 @@
 import { Euler, PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { MathUtils } from '../core/MathUtils'
 import { CarPhysics } from '../vehicle/CarPhysics'
+import { CockpitView } from '../vehicle/CarProfiles'
 import { WorldSurface } from '../world/WorldSurface'
 
 /** Parameters of a single camera mode */
@@ -10,7 +11,7 @@ interface CameraMode {
     look_ahead: number
     look_height: number
     stiffness: number
-    /** Camera is attached to the body (cockpit view) */
+    /** Camera is attached to the body (cockpit view); eye position then comes from the car's cockpit, not from the mode */
     rigid: boolean
 }
 
@@ -53,9 +54,15 @@ export class CameraRig {
     private look_point: Vector3 = new Vector3()
     /** Mode FOV ignoring the flight, smoothed separately from the camera */
     private fov: number = 60
+    /** Eye position of the attached camera; each car has its own cabin */
+    private cockpit: CockpitView = { distance: -0.35, height: 1.12, look_height: 1.0 }
 
     constructor(aspect: number) {
         this.camera = new PerspectiveCamera(60, aspect, 0.1, 4000)
+    }
+
+    setCockpit(cockpit: CockpitView): void {
+        this.cockpit = cockpit
     }
 
     get mode_index(): number {
@@ -204,8 +211,9 @@ export class CameraRig {
      */
     private mountOnCar(car: CarPhysics, mode: CameraMode): void {
         const orientation: Quaternion = new Quaternion().setFromEuler(new Euler(car.render_pitch, car.render_yaw, car.render_roll, 'YXZ'))
-        const eye: Vector3 = new Vector3(0, mode.height, -mode.distance).applyQuaternion(orientation).add(car.render_position)
-        const look: Vector3 = new Vector3(0, mode.look_height, mode.look_ahead).applyQuaternion(orientation).add(car.render_position)
+        const cockpit: CockpitView = this.cockpit
+        const eye: Vector3 = new Vector3(0, cockpit.height, -cockpit.distance).applyQuaternion(orientation).add(car.render_position)
+        const look: Vector3 = new Vector3(0, cockpit.look_height, mode.look_ahead).applyQuaternion(orientation).add(car.render_position)
         const shake: number = car.impact * 0.05 + car.landing_impact * 0.03
         eye.y += Math.sin(this.shake_time * 29 + 1.3) * shake
         this.position.copy(eye)

@@ -245,6 +245,7 @@ export class Game {
             this.car = car
             this.scene.add(car.model.root)
             this.environment.setCar(car)
+            this.camera_rig.setCockpit(profile.look.cockpit)
             this.last_position.copy(car.position)
             this.camera_rig.snap()
             await this.renderer.compileAsync(this.scene, this.camera_rig.camera)
@@ -338,6 +339,7 @@ export class Game {
         this.setupScene(assets)
         this.world = new World(this.scene, assets, anisotropy, WORLD_SEED)
         this.car = new Car(assets.car, profile)
+        this.camera_rig.setCockpit(profile.look.cockpit)
         this.scene.add(this.car.model.root)
         this.particles.add(this.precipitation.mesh)
         this.particles.add(this.spray.points)
