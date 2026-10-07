@@ -518,7 +518,9 @@ export class Game {
         const yaw: number = this.car.physics.yaw
         const forward: Vector3 = new Vector3(Math.sin(yaw), 0, Math.cos(yaw))
         const head: Vector3 = root.clone().addScaledVector(forward, 2).setY(root.y + 0.7)
-        this.precipitation.update(this.time, this.camera_rig.camera.position, this.car.physics.velocity, head, forward)
+        // While paused the car is frozen but keeps its velocity: without zeroing it snowflakes would stretch into dashes
+        const relative: Vector3 = playing ? this.car.physics.velocity : new Vector3()
+        this.precipitation.update(this.time, this.camera_rig.camera.position, relative, head, forward)
 
         // Spray is emitted at the contact patches of the rear wheels
         const emitters: Vector3[] = []
