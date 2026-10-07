@@ -106,7 +106,8 @@ export class ShaderPatches {
                 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.76, 0.8) * (0.9 + rpDetail * 0.2), rpSnowCover);
                 rpPuddle *= 1.0 - rpSnowCover;`)
             .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-                roughnessFactor = mix(roughnessFactor, mix(roughnessFactor * 0.42, 0.03, rpPuddle), uWetness);
+                // Not lower than ~0.1: a near-mirror GGX peak from a point light turns every ripple into a blinding firefly
+                roughnessFactor = mix(roughnessFactor, mix(roughnessFactor * 0.42, 0.1, rpPuddle), uWetness);
                 roughnessFactor = mix(roughnessFactor, 0.6, rpSnowCover);`)
             .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
                 normal = normalize(mix(normal, nonPerturbedNormal, max(rpPuddle * 0.92, rpSnowCover * 0.7)));

@@ -62,7 +62,9 @@ export class PostProcessing {
         const target: WebGLRenderTarget = new WebGLRenderTarget(size.x, size.y, { type: HalfFloatType, samples: 4 })
         this.composer = new EffectComposer(renderer, target)
         this.composer.addPass(new RenderPass(scene, camera))
-        this.bloom = new UnrealBloomPass(new Vector2(size.x, size.y), 0.55, 0.65, 0.92)
+        // The threshold is in linear HDR before exposure: below ~1.4 plain lit surfaces (snow, wet asphalt) glow too.
+        // A small radius keeps the glow around the source instead of a haze over half the screen
+        this.bloom = new UnrealBloomPass(new Vector2(size.x, size.y), 0.3, 0.4, 1.4)
         this.composer.addPass(this.bloom)
         this.composer.addPass(new OverlayPass(particles, camera))
         this.grade = new ShaderPass(GRADE_SHADER)

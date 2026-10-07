@@ -320,7 +320,8 @@ export class CarModel {
             this.head_lights.push(light)
         }
         for (let side: number = -1; side <= 1; side += 2) {
-            const tail: PointLight = new PointLight(0xff1a0a, 2.5, 10, 1.4)
+            // Short reach: the chase camera is ~6 m behind, and wet asphalt under it would sparkle with red glints
+            const tail: PointLight = new PointLight(0xff1a0a, 1.6, 5, 1.6)
             tail.position.set(side * this.look.taillight.x, this.look.taillight.y, -this.length * 0.5 + this.look.taillight.inset)
             this.root.add(tail)
             this.tail_lights.push(tail)

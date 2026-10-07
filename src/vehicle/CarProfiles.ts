@@ -142,8 +142,8 @@ export const CAR_PROFILES: Record<CarId, CarProfile> = {
             isLamp: (mesh: Mesh): boolean => mesh.name.startsWith('08_WindowGlass'),
             opaque_lamps: true,
             headlight: { x: 0.62, y: 0.92, inset: 0.35 },
-            // Behind and below the cabin: point lights cast no shadows and would tint the seats through the glass
-            taillight: { x: 0.55, y: 0.3, inset: -1.1 },
+            // Not too low: close to a wet road the point light leaves a burning hotspot that bloom blows up
+            taillight: { x: 0.55, y: 0.7, inset: -0.6 },
             // Tall cabin far behind a long hood: the eye sits over the front bench, above the dashboard at ~1.2 m
             // Large flat windows close to the eye: almost clear glass, reflections only at grazing angles
             glass: { opacity: 0.12, reflection: 0.7 },
