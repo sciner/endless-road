@@ -1,7 +1,7 @@
 import {
     ACESFilmicToneMapping, PCFShadowMap, PMREMGenerator, Scene, SRGBColorSpace, Texture, Vector3, WebGLRenderer,
+    WebGLRenderTarget,
 } from 'three'
-import { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { Input, DriveInput } from './core/Input'
 import { Settings } from './core/Settings'
 import { EnvironmentSystem } from './environment/EnvironmentSystem'
@@ -22,6 +22,7 @@ import { DebugOverlay, DebugSnapshot } from './ui/DebugOverlay'
 import { MainMenu, MenuOption } from './ui/MainMenu'
 import { QUALITY_CHOICES, QualityChoice, QualityLevel, QualityPreset, QualityPresets } from './render/QualityPresets'
 import { Car } from './vehicle/Car'
+import { CarGarage } from './vehicle/CarGarage'
 import { CAR_IDS, CAR_PROFILES, CarId, CarProfile } from './vehicle/CarProfiles'
 import { CarWheel } from './vehicle/CarModel'
 import { World } from './world/World'
@@ -75,6 +76,7 @@ export class Game {
     private quality: QualityPreset
     /** Set while a new car model is loading, so repeated menu presses don't start parallel loads */
     private car_loading: boolean = false
+    private garage: CarGarage
 
     constructor(root: HTMLElement) {
         this.root = root
@@ -99,6 +101,11 @@ export class Game {
         this.hud = new Hud(root)
         this.debug = new DebugOverlay(root, this.renderer)
         this.camera_rig = new CameraRig(window.innerWidth / window.innerHeight)
+        this.garage = new CarGarage(this.renderer, this.scene, this.camera_rig.camera, {
+            current: (): Car => this.car,
+            headlight_shadows: (): boolean => this.quality.headlight_shadows,
+            target: (): WebGLRenderTarget | null => this.post?.scene_target ?? null,
+        })
         this.camera_rig.setMode(this.settings.camera_mode)
         this.hud.setHelpVisible(this.settings.help_visible)
         this.debug.setVisible(this.settings.debug_visible)
@@ -224,7 +231,8 @@ export class Game {
     }
 
     /**
-     * Replaces the car with another model at the same place on the road.
+     * Replaces the car with another one at the same place on the road. A car from the garage
+     * is swapped in the same frame; only a car that is not built yet makes the player wait.
      * The choice is saved right away so the menu shows it while the model loads
      */
     private async swapCar(id: CarId): Promise<void> {
@@ -232,23 +240,10 @@ export class Game {
         this.menu.applyLanguage()
         this.car_loading = true
         try {
-            const profile: CarProfile = CAR_PROFILES[id]
-            const gltf: GLTF = await AssetLibrary.loadCar(profile.look.model_path)
+            const car: Car = await this.garage.get(id)
             // The player could switch again during loading: only the last choice is kept
             if (this.settings.car !== id) return
-            const old_car: Car = this.car
-            const car: Car = new Car(gltf, profile)
-            car.placeOnRoad(this.world.surface, old_car.position.x, old_car.position.z)
-            car.model.setHeadlightShadows(this.quality.headlight_shadows)
-            this.scene.remove(old_car.model.root)
-            old_car.dispose()
-            this.car = car
-            this.scene.add(car.model.root)
-            this.environment.setCar(car)
-            this.camera_rig.setCockpit(profile.look.cockpit)
-            this.last_position.copy(car.position)
-            this.camera_rig.snap()
-            await this.renderer.compileAsync(this.scene, this.camera_rig.camera)
+            this.mountCar(car)
         } catch (error: unknown) {
             // A failed load leaves the current car and its choice in place
             console.error(error)
@@ -259,6 +254,21 @@ export class Game {
         }
         // The player switched again during loading: catch up with the latest choice
         if (this.settings.car !== this.car.profile.id) void this.swapCar(this.settings.car)
+    }
+
+    /** Puts a ready car into the scene in place of the current one; the old one stays in the garage */
+    private mountCar(car: Car): void {
+        const old_car: Car = this.car
+        if (old_car === car) return
+        car.placeOnRoad(this.world.surface, old_car.position.x, old_car.position.z)
+        car.model.setHeadlightShadows(this.quality.headlight_shadows)
+        this.scene.remove(old_car.model.root)
+        this.scene.add(car.model.root)
+        this.car = car
+        this.environment.setCar(car)
+        this.camera_rig.setCockpit(car.profile.look.cockpit)
+        this.last_position.copy(car.position)
+        this.camera_rig.snap()
     }
 
     /** Applies a quality preset live: resolution, shadows, bloom and anti-aliasing */
@@ -274,7 +284,8 @@ export class Game {
         this.pixel_ratio = Math.min(window.devicePixelRatio, this.quality.pixel_ratio)
         this.renderer.setPixelRatio(this.pixel_ratio)
         this.lighting.setShadowQuality(this.quality.shadow_map, this.quality.shadow_extent)
-        this.car.model.setHeadlightShadows(this.quality.headlight_shadows)
+        const cars: Car[] = this.garage.all()
+        for (let i: number = 0; i < cars.length; i++) cars[i].model.setHeadlightShadows(this.quality.headlight_shadows)
         if (this.post) this.post.setQuality(this.quality.bloom, this.quality.msaa)
         this.resize()
     }
@@ -339,6 +350,7 @@ export class Game {
         this.setupScene(assets)
         this.world = new World(this.scene, assets, anisotropy, WORLD_SEED)
         this.car = new Car(assets.car, profile)
+        this.garage.add(this.car)
         this.camera_rig.setCockpit(profile.look.cockpit)
         this.scene.add(this.car.model.root)
         this.particles.add(this.precipitation.mesh)
@@ -372,14 +384,20 @@ export class Game {
         this.applyQuality()
 
         this.hud.setLoading(0.97, lang.loading_shaders)
-        await this.renderer.compileAsync(this.scene, this.camera_rig.camera)
-        await this.renderer.compileAsync(this.particles, this.camera_rig.camera)
+        // Compiled for the HDR buffer both scenes are drawn into, otherwise these are screen variants that never get used
+        this.renderer.setRenderTarget(this.post.scene_target)
+        const scene_ready: Promise<unknown> = this.renderer.compileAsync(this.scene, this.camera_rig.camera)
+        const particles_ready: Promise<unknown> = this.renderer.compileAsync(this.particles, this.camera_rig.camera)
+        this.renderer.setRenderTarget(null)
+        await Promise.all([scene_ready, particles_ready])
         this.hud.setLoading(1, '')
         this.hud.hideLoading()
         this.menu.show(false)
 
         this.last_frame = performance.now()
         this.renderer.setAnimationLoop((): void => this.frame())
+        // The other cars are built while the player looks at the menu, so the first swap is already instant
+        void this.garage.preloadAll()
     }
 
     /** Sky, lights and HDRI environment; EnvironmentSystem sets their colors and intensity */

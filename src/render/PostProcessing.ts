@@ -70,6 +70,11 @@ export class PostProcessing {
         this.composer.addPass(new OutputPass())
     }
 
+    /** HDR buffer the scene is drawn into: shaders compiled for it skip tone mapping, unlike the screen ones */
+    get scene_target(): WebGLRenderTarget {
+        return this.composer.readBuffer
+    }
+
     /** Bloom on or off and the MSAA sample count; render targets are recreated with the new samples */
     setQuality(bloom: boolean, msaa: number): void {
         this.bloom.enabled = bloom
