@@ -1,0 +1,395 @@
+@font-stack: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+@text-main: rgba(235, 240, 250, 0.92);
+@text-dim: rgba(200, 210, 230, 0.55);
+@accent: #e8f0ff;
+@redline: #ff3b2f;
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #05070b;
+    font-family: @font-stack;
+    color: @text-main;
+    user-select: none;
+}
+
+.game-root {
+    position: fixed;
+    inset: 0;
+}
+
+.game-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #0f1b30 0%, #04060a 75%);
+    transition: opacity 1.2s ease;
+    z-index: 10;
+}
+
+.loading-title {
+    font-size: 54px;
+    font-weight: 200;
+    letter-spacing: 18px;
+    color: @accent;
+}
+
+.loading-subtitle {
+    margin-top: 10px;
+    font-size: 15px;
+    letter-spacing: 3px;
+    color: @text-dim;
+}
+
+.loading-track {
+    margin-top: 46px;
+    width: 320px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.loading-bar {
+    width: 0;
+    height: 100%;
+    background: @accent;
+    transition: width 0.25s ease;
+}
+
+.loading-text {
+    margin-top: 14px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: @text-dim;
+}
+
+.hud-panel {
+    position: absolute;
+    right: 42px;
+    bottom: 36px;
+    min-width: 190px;
+    text-align: right;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+}
+
+.hud-speed {
+    font-size: 72px;
+    font-weight: 200;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.hud-unit {
+    margin-top: 2px;
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: @text-dim;
+}
+
+.hud-rpm-track {
+    margin: 12px 0 10px auto;
+    width: 190px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.hud-rpm-bar {
+    width: 0;
+    height: 100%;
+    background: @accent;
+    transition: background 0.15s ease;
+}
+
+.redline {
+    background: @redline;
+}
+
+.hud-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: @text-dim;
+}
+
+.hud-gear {
+    font-size: 20px;
+    color: @text-main;
+}
+
+.hud-distance {
+    align-self: flex-end;
+}
+
+.hud-help {
+    position: absolute;
+    left: 28px;
+    bottom: 30px;
+    font-size: 12px;
+    line-height: 1.8;
+    letter-spacing: 1px;
+    color: @text-dim;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+
+    b {
+        color: @text-main;
+        font-weight: 600;
+    }
+}
+
+.hud-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+}
+
+.hud-toast {
+    position: absolute;
+    top: 9vh;
+    left: 50%;
+    transform: translate(-50%, -8px);
+    padding: 10px 26px;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: @accent;
+    background: rgba(4, 7, 12, 0.55);
+    border: 1px solid rgba(232, 240, 255, 0.14);
+    border-radius: 3px;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    z-index: 7;
+}
+
+.hud-toast-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.env-fade {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.38s ease;
+    z-index: 4;
+}
+
+.env-fade-active {
+    opacity: 1;
+}
+
+.menu-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding-left: 9vw;
+    background: linear-gradient(90deg, rgba(3, 5, 9, 0.82) 0%, rgba(3, 5, 9, 0.45) 38%, rgba(3, 5, 9, 0) 70%);
+    transition: opacity 0.6s ease;
+    z-index: 5;
+}
+
+.menu-paused {
+    background: linear-gradient(90deg, rgba(3, 5, 9, 0.88) 0%, rgba(3, 5, 9, 0.6) 45%, rgba(3, 5, 9, 0.25) 100%);
+}
+
+.menu-title {
+    font-size: 54px;
+    font-weight: 200;
+    letter-spacing: 18px;
+    color: @accent;
+    text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+}
+
+.menu-subtitle {
+    margin-top: 10px;
+    font-size: 15px;
+    letter-spacing: 3px;
+    color: @text-dim;
+}
+
+.menu-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 56px;
+    min-width: 380px;
+}
+
+.menu-heading {
+    margin-bottom: 14px;
+    font-size: 12px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: @text-dim;
+}
+
+.menu-item {
+    position: relative;
+    padding: 10px 0 10px 22px;
+    font-size: 20px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    color: @text-dim;
+    cursor: pointer;
+    transition: color 0.2s ease, padding-left 0.2s ease;
+
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        width: 10px;
+        height: 1px;
+        background: @accent;
+        opacity: 0;
+        transition: opacity 0.2s ease, width 0.2s ease;
+    }
+}
+
+.menu-selected {
+    padding-left: 30px;
+    color: @accent;
+
+    &::before {
+        width: 18px;
+        opacity: 1;
+    }
+}
+
+.menu-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+}
+
+.menu-option-label {
+    flex-grow: 1;
+}
+
+.menu-option-arrow {
+    padding: 0 6px;
+    color: @text-dim;
+
+    &:hover {
+        color: @accent;
+    }
+}
+
+.menu-option-value {
+    min-width: 90px;
+    text-align: center;
+    color: @text-main;
+}
+
+.menu-controls {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 28px;
+    margin-bottom: 18px;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.menu-key {
+    color: @text-main;
+    font-weight: 600;
+}
+
+.menu-action {
+    color: @text-dim;
+}
+
+.menu-footer {
+    position: absolute;
+    left: 9vw;
+    bottom: 36px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: @text-dim;
+}
+
+@debug-font: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+
+.debug-overlay {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 400px;
+    max-height: calc(100% - 32px);
+    overflow: hidden;
+    padding: 10px 14px;
+    background: rgba(6, 9, 14, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    backdrop-filter: blur(6px);
+    font-family: @debug-font;
+    font-size: 11px;
+    line-height: 1.55;
+    color: @text-main;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.debug-section {
+    margin-bottom: 8px;
+
+    &:last-child {
+        margin-bottom: 0;
+    }
+}
+
+.debug-title {
+    margin-bottom: 2px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #7fb4ff;
+}
+
+.debug-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.debug-label {
+    flex-shrink: 0;
+    color: @text-dim;
+}
+
+.debug-value {
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

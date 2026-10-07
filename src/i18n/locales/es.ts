@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const es: LangStrings = {
+    subtitle: 'baja el ritmo, deja que tu mente se calme',
+    loading: 'Cargando…',
+    loading_assets: 'Cargando modelos y texturas…',
+    loading_world: 'Generando la carretera y el bosque…',
+    loading_shaders: 'Compilando shaders…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'Espacio',
+    key_left_stick: 'Stick izquierdo',
+    gamepad: 'Mando',
+
+    action_throttle: 'acelerar',
+    action_brake: 'freno / marcha atrás',
+    action_steer: 'dirección',
+    action_handbrake: 'freno de mano',
+    action_camera: 'cámara',
+    action_random_environment: 'entorno aleatorio',
+    action_reset: 'volver a la carretera',
+    action_sound: 'sonido',
+    action_help: 'ayuda',
+    action_debug: 'información técnica',
+    action_pause: 'pausa y menú',
+    action_hide: 'ocultar',
+
+    menu_footer: '↑ ↓ elegir · Enter / A confirmar · Esc / B atrás',
+    menu_play: 'Empezar a conducir',
+    menu_resume: 'Continuar',
+    menu_environment: 'Entorno',
+    menu_settings: 'Ajustes',
+    menu_controls: 'Controles',
+    menu_back: 'Atrás',
+    menu_random_environment: 'Entorno aleatorio',
+
+    option_language: 'Idioma',
+    option_sound: 'Sonido',
+    option_camera: 'Cámara',
+    option_help: 'Ayuda de controles',
+    option_debug: 'Información técnica',
+    option_time: 'Hora del día',
+    option_weather: 'Clima',
+    option_biome: 'Paisaje',
+    on: 'Sí',
+    off: 'No',
+
+    camera_chase: 'Persecución',
+    camera_far: 'Lejana',
+    camera_hood: 'Capó',
+
+    time_dawn: 'Amanecer',
+    time_day: 'Día',
+    time_sunset: 'Atardecer',
+    time_night: 'Noche',
+    weather_clear: 'Despejado',
+    weather_rain: 'Lluvia',
+    weather_snow: 'Nieve',
+    weather_fog: 'Niebla',
+    biome_forest: 'Bosque',
+    biome_autumn: 'Bosque otoñal',
+    biome_desert: 'Desierto',
+
+    gamepad_connected: 'Mando conectado: {name}',
+    gamepad_disconnected: 'Mando desconectado',
+}

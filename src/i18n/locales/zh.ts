@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const zh: LangStrings = {
+    subtitle: '放慢速度，让思绪安静下来',
+    loading: '加载中…',
+    loading_assets: '正在加载模型和纹理…',
+    loading_world: '正在生成道路和森林…',
+    loading_shaders: '正在编译着色器…',
+
+    unit_kmh: '公里/时',
+    unit_km: '公里',
+
+    key_space: '空格',
+    key_left_stick: '左摇杆',
+    gamepad: '手柄',
+
+    action_throttle: '油门',
+    action_brake: '刹车 / 倒车',
+    action_steer: '转向',
+    action_handbrake: '手刹',
+    action_camera: '视角',
+    action_random_environment: '随机环境',
+    action_reset: '回到道路',
+    action_sound: '声音',
+    action_help: '提示',
+    action_debug: '技术信息',
+    action_pause: '暂停和菜单',
+    action_hide: '隐藏',
+
+    menu_footer: '↑ ↓ 选择 · Enter / A 确认 · Esc / B 返回',
+    menu_play: '开始驾驶',
+    menu_resume: '继续',
+    menu_environment: '环境',
+    menu_settings: '设置',
+    menu_controls: '操作',
+    menu_back: '返回',
+    menu_random_environment: '随机环境',
+
+    option_language: '语言',
+    option_sound: '声音',
+    option_camera: '视角',
+    option_help: '操作提示',
+    option_debug: '技术信息',
+    option_time: '时间',
+    option_weather: '天气',
+    option_biome: '地形',
+    on: '开',
+    off: '关',
+
+    camera_chase: '追随',
+    camera_far: '远景',
+    camera_hood: '引擎盖',
+
+    time_dawn: '黎明',
+    time_day: '白天',
+    time_sunset: '日落',
+    time_night: '夜晚',
+    weather_clear: '晴朗',
+    weather_rain: '下雨',
+    weather_snow: '下雪',
+    weather_fog: '大雾',
+    biome_forest: '森林',
+    biome_autumn: '秋林',
+    biome_desert: '沙漠',
+
+    gamepad_connected: '手柄已连接：{name}',
+    gamepad_disconnected: '手柄已断开',
+}

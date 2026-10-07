@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const pt: LangStrings = {
+    subtitle: 'desacelere, deixe a mente se acalmar',
+    loading: 'Carregando…',
+    loading_assets: 'Carregando modelos e texturas…',
+    loading_world: 'Gerando a estrada e a floresta…',
+    loading_shaders: 'Compilando shaders…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'Espaço',
+    key_left_stick: 'Analógico esquerdo',
+    gamepad: 'Controle',
+
+    action_throttle: 'acelerar',
+    action_brake: 'freio / ré',
+    action_steer: 'direção',
+    action_handbrake: 'freio de mão',
+    action_camera: 'câmera',
+    action_random_environment: 'ambiente aleatório',
+    action_reset: 'voltar para a estrada',
+    action_sound: 'som',
+    action_help: 'dicas',
+    action_debug: 'informações técnicas',
+    action_pause: 'pausa e menu',
+    action_hide: 'ocultar',
+
+    menu_footer: '↑ ↓ escolher · Enter / A confirmar · Esc / B voltar',
+    menu_play: 'Começar a dirigir',
+    menu_resume: 'Continuar',
+    menu_environment: 'Ambiente',
+    menu_settings: 'Configurações',
+    menu_controls: 'Controles',
+    menu_back: 'Voltar',
+    menu_random_environment: 'Ambiente aleatório',
+
+    option_language: 'Idioma',
+    option_sound: 'Som',
+    option_camera: 'Câmera',
+    option_help: 'Dicas de controle',
+    option_debug: 'Informações técnicas',
+    option_time: 'Hora do dia',
+    option_weather: 'Clima',
+    option_biome: 'Paisagem',
+    on: 'Lig.',
+    off: 'Desl.',
+
+    camera_chase: 'Perseguição',
+    camera_far: 'Distante',
+    camera_hood: 'Capô',
+
+    time_dawn: 'Amanhecer',
+    time_day: 'Dia',
+    time_sunset: 'Pôr do sol',
+    time_night: 'Noite',
+    weather_clear: 'Céu limpo',
+    weather_rain: 'Chuva',
+    weather_snow: 'Neve',
+    weather_fog: 'Neblina',
+    biome_forest: 'Floresta',
+    biome_autumn: 'Floresta de outono',
+    biome_desert: 'Deserto',
+
+    gamepad_connected: 'Controle conectado: {name}',
+    gamepad_disconnected: 'Controle desconectado',
+}

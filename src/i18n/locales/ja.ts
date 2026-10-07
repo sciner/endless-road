@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const ja: LangStrings = {
+    subtitle: 'スピードを落として、心を静めよう',
+    loading: '読み込み中…',
+    loading_assets: 'モデルとテクスチャを読み込み中…',
+    loading_world: '道路と森を生成中…',
+    loading_shaders: 'シェーダーをコンパイル中…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'スペース',
+    key_left_stick: '左スティック',
+    gamepad: 'ゲームパッド',
+
+    action_throttle: 'アクセル',
+    action_brake: 'ブレーキ / バック',
+    action_steer: 'ハンドル',
+    action_handbrake: 'サイドブレーキ',
+    action_camera: 'カメラ',
+    action_random_environment: 'ランダムな環境',
+    action_reset: '道路に戻る',
+    action_sound: 'サウンド',
+    action_help: 'ヒント',
+    action_debug: '技術情報',
+    action_pause: 'ポーズとメニュー',
+    action_hide: '隠す',
+
+    menu_footer: '↑ ↓ 選択 · Enter / A 決定 · Esc / B 戻る',
+    menu_play: 'ドライブ開始',
+    menu_resume: '続ける',
+    menu_environment: '環境',
+    menu_settings: '設定',
+    menu_controls: '操作方法',
+    menu_back: '戻る',
+    menu_random_environment: 'ランダムな環境',
+
+    option_language: '言語',
+    option_sound: 'サウンド',
+    option_camera: 'カメラ',
+    option_help: '操作ヒント',
+    option_debug: '技術情報',
+    option_time: '時間帯',
+    option_weather: '天気',
+    option_biome: '地形',
+    on: 'オン',
+    off: 'オフ',
+
+    camera_chase: '追従',
+    camera_far: '遠景',
+    camera_hood: 'ボンネット',
+
+    time_dawn: '夜明け',
+    time_day: '昼',
+    time_sunset: '夕暮れ',
+    time_night: '夜',
+    weather_clear: '晴れ',
+    weather_rain: '雨',
+    weather_snow: '雪',
+    weather_fog: '霧',
+    biome_forest: '森',
+    biome_autumn: '秋の森',
+    biome_desert: '砂漠',
+
+    gamepad_connected: 'ゲームパッド接続：{name}',
+    gamepad_disconnected: 'ゲームパッド切断',
+}

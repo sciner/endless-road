@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const fr: LangStrings = {
+    subtitle: 'ralentis, laisse ton esprit s’apaiser',
+    loading: 'Chargement…',
+    loading_assets: 'Chargement des modèles et textures…',
+    loading_world: 'Génération de la route et de la forêt…',
+    loading_shaders: 'Compilation des shaders…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'Espace',
+    key_left_stick: 'Stick gauche',
+    gamepad: 'Manette',
+
+    action_throttle: 'accélérer',
+    action_brake: 'freiner / marche arrière',
+    action_steer: 'direction',
+    action_handbrake: 'frein à main',
+    action_camera: 'caméra',
+    action_random_environment: 'environnement aléatoire',
+    action_reset: 'revenir sur la route',
+    action_sound: 'son',
+    action_help: 'aide',
+    action_debug: 'infos techniques',
+    action_pause: 'pause et menu',
+    action_hide: 'masquer',
+
+    menu_footer: '↑ ↓ choisir · Entrée / A valider · Échap / B retour',
+    menu_play: 'Prendre la route',
+    menu_resume: 'Continuer',
+    menu_environment: 'Environnement',
+    menu_settings: 'Paramètres',
+    menu_controls: 'Commandes',
+    menu_back: 'Retour',
+    menu_random_environment: 'Environnement aléatoire',
+
+    option_language: 'Langue',
+    option_sound: 'Son',
+    option_camera: 'Caméra',
+    option_help: 'Aide aux commandes',
+    option_debug: 'Infos techniques',
+    option_time: 'Moment de la journée',
+    option_weather: 'Météo',
+    option_biome: 'Paysage',
+    on: 'Oui',
+    off: 'Non',
+
+    camera_chase: 'Poursuite',
+    camera_far: 'Éloignée',
+    camera_hood: 'Capot',
+
+    time_dawn: 'Aube',
+    time_day: 'Jour',
+    time_sunset: 'Coucher de soleil',
+    time_night: 'Nuit',
+    weather_clear: 'Dégagé',
+    weather_rain: 'Pluie',
+    weather_snow: 'Neige',
+    weather_fog: 'Brouillard',
+    biome_forest: 'Forêt',
+    biome_autumn: 'Forêt d’automne',
+    biome_desert: 'Désert',
+
+    gamepad_connected: 'Manette connectée : {name}',
+    gamepad_disconnected: 'Manette déconnectée',
+}

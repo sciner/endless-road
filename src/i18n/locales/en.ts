@@ -1,0 +1,70 @@
+/** Reference dictionary: its keys define the full set of UI strings */
+export const en = {
+    subtitle: 'slow down, let your mind go quiet',
+    loading: 'Loading…',
+    loading_assets: 'Loading models and textures…',
+    loading_world: 'Generating the road and forest…',
+    loading_shaders: 'Compiling shaders…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'Space',
+    key_left_stick: 'Left stick',
+    gamepad: 'Gamepad',
+
+    action_throttle: 'throttle',
+    action_brake: 'brake / reverse',
+    action_steer: 'steering',
+    action_handbrake: 'handbrake',
+    action_camera: 'camera',
+    action_random_environment: 'random environment',
+    action_reset: 'back on the road',
+    action_sound: 'sound',
+    action_help: 'hints',
+    action_debug: 'technical info',
+    action_pause: 'pause and menu',
+    action_hide: 'hide',
+
+    menu_footer: '↑ ↓ select · Enter / A confirm · Esc / B back',
+    menu_play: 'Start driving',
+    menu_resume: 'Continue',
+    menu_environment: 'Environment',
+    menu_settings: 'Settings',
+    menu_controls: 'Controls',
+    menu_back: 'Back',
+    menu_random_environment: 'Random environment',
+
+    option_language: 'Language',
+    option_sound: 'Sound',
+    option_camera: 'Camera',
+    option_help: 'Control hints',
+    option_debug: 'Technical info',
+    option_time: 'Time of day',
+    option_weather: 'Weather',
+    option_biome: 'Terrain',
+    on: 'On',
+    off: 'Off',
+
+    camera_chase: 'Chase',
+    camera_far: 'Far',
+    camera_hood: 'Hood',
+
+    time_dawn: 'Dawn',
+    time_day: 'Day',
+    time_sunset: 'Sunset',
+    time_night: 'Night',
+    weather_clear: 'Clear',
+    weather_rain: 'Rain',
+    weather_snow: 'Snow',
+    weather_fog: 'Fog',
+    biome_forest: 'Forest',
+    biome_autumn: 'Autumn forest',
+    biome_desert: 'Desert',
+
+    gamepad_connected: 'Gamepad connected: {name}',
+    gamepad_disconnected: 'Gamepad disconnected',
+}
+
+export type LangKey = keyof typeof en
+export type LangStrings = Record<LangKey, string>

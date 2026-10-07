@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const de: LangStrings = {
+    subtitle: 'fahr langsamer, lass die Gedanken zur Ruhe kommen',
+    loading: 'Wird geladen…',
+    loading_assets: 'Modelle und Texturen werden geladen…',
+    loading_world: 'Straße und Wald werden erzeugt…',
+    loading_shaders: 'Shader werden kompiliert…',
+
+    unit_kmh: 'km/h',
+    unit_km: 'km',
+
+    key_space: 'Leertaste',
+    key_left_stick: 'Linker Stick',
+    gamepad: 'Gamepad',
+
+    action_throttle: 'Gas',
+    action_brake: 'Bremse / Rückwärts',
+    action_steer: 'Lenken',
+    action_handbrake: 'Handbremse',
+    action_camera: 'Kamera',
+    action_random_environment: 'zufällige Umgebung',
+    action_reset: 'zurück auf die Straße',
+    action_sound: 'Ton',
+    action_help: 'Hinweise',
+    action_debug: 'technische Infos',
+    action_pause: 'Pause und Menü',
+    action_hide: 'ausblenden',
+
+    menu_footer: '↑ ↓ Auswahl · Enter / A bestätigen · Esc / B zurück',
+    menu_play: 'Losfahren',
+    menu_resume: 'Weiter',
+    menu_environment: 'Umgebung',
+    menu_settings: 'Einstellungen',
+    menu_controls: 'Steuerung',
+    menu_back: 'Zurück',
+    menu_random_environment: 'Zufällige Umgebung',
+
+    option_language: 'Sprache',
+    option_sound: 'Ton',
+    option_camera: 'Kamera',
+    option_help: 'Steuerungshinweise',
+    option_debug: 'Technische Infos',
+    option_time: 'Tageszeit',
+    option_weather: 'Wetter',
+    option_biome: 'Landschaft',
+    on: 'An',
+    off: 'Aus',
+
+    camera_chase: 'Verfolgung',
+    camera_far: 'Weit',
+    camera_hood: 'Motorhaube',
+
+    time_dawn: 'Morgengrauen',
+    time_day: 'Tag',
+    time_sunset: 'Sonnenuntergang',
+    time_night: 'Nacht',
+    weather_clear: 'Klar',
+    weather_rain: 'Regen',
+    weather_snow: 'Schnee',
+    weather_fog: 'Nebel',
+    biome_forest: 'Wald',
+    biome_autumn: 'Herbstwald',
+    biome_desert: 'Wüste',
+
+    gamepad_connected: 'Gamepad verbunden: {name}',
+    gamepad_disconnected: 'Gamepad getrennt',
+}

@@ -1,0 +1,68 @@
+import { LangStrings } from './en'
+
+export const ru: LangStrings = {
+    subtitle: 'сбавь скорость, дай мыслям утихнуть',
+    loading: 'Загрузка…',
+    loading_assets: 'Загрузка моделей и текстур…',
+    loading_world: 'Генерация трассы и леса…',
+    loading_shaders: 'Компиляция шейдеров…',
+
+    unit_kmh: 'км/ч',
+    unit_km: 'км',
+
+    key_space: 'Пробел',
+    key_left_stick: 'Левый стик',
+    gamepad: 'Геймпад',
+
+    action_throttle: 'газ',
+    action_brake: 'тормоз / задний ход',
+    action_steer: 'руль',
+    action_handbrake: 'ручник',
+    action_camera: 'камера',
+    action_random_environment: 'случайное окружение',
+    action_reset: 'вернуться на дорогу',
+    action_sound: 'звук',
+    action_help: 'подсказки',
+    action_debug: 'техническая информация',
+    action_pause: 'пауза и меню',
+    action_hide: 'скрыть',
+
+    menu_footer: '↑ ↓ выбор · Enter / A подтвердить · Esc / B назад',
+    menu_play: 'Начать поездку',
+    menu_resume: 'Продолжить',
+    menu_environment: 'Окружение',
+    menu_settings: 'Настройки',
+    menu_controls: 'Управление',
+    menu_back: 'Назад',
+    menu_random_environment: 'Случайное окружение',
+
+    option_language: 'Язык',
+    option_sound: 'Звук',
+    option_camera: 'Камера',
+    option_help: 'Подсказки управления',
+    option_debug: 'Техническая информация',
+    option_time: 'Время суток',
+    option_weather: 'Погода',
+    option_biome: 'Местность',
+    on: 'Вкл',
+    off: 'Выкл',
+
+    camera_chase: 'Погоня',
+    camera_far: 'Дальняя',
+    camera_hood: 'Капот',
+
+    time_dawn: 'Рассвет',
+    time_day: 'День',
+    time_sunset: 'Закат',
+    time_night: 'Ночь',
+    weather_clear: 'Ясно',
+    weather_rain: 'Дождь',
+    weather_snow: 'Снег',
+    weather_fog: 'Туман',
+    biome_forest: 'Лес',
+    biome_autumn: 'Осенний лес',
+    biome_desert: 'Пустыня',
+
+    gamepad_connected: 'Геймпад подключён: {name}',
+    gamepad_disconnected: 'Геймпад отключён',
+}
