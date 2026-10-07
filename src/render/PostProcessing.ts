@@ -70,6 +70,17 @@ export class PostProcessing {
         this.composer.addPass(new OutputPass())
     }
 
+    /** Bloom on or off and the MSAA sample count; render targets are recreated with the new samples */
+    setQuality(bloom: boolean, msaa: number): void {
+        this.bloom.enabled = bloom
+        const targets: WebGLRenderTarget[] = [this.composer.renderTarget1, this.composer.renderTarget2]
+        for (let i: number = 0; i < targets.length; i++) {
+            if (targets[i].samples === msaa) continue
+            targets[i].samples = msaa
+            targets[i].dispose()
+        }
+    }
+
     setSize(width: number, height: number, pixel_ratio: number): void {
         this.composer.setPixelRatio(pixel_ratio)
         this.composer.setSize(width, height)

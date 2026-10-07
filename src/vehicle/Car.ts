@@ -8,6 +8,7 @@ import { RoadProjection } from '../world/RoadTypes'
 import { CarModel, CarWheel } from './CarModel'
 import { CarPhysics } from './CarPhysics'
 import { CarContactShadow } from './CarContactShadow'
+import { CarProfile } from './CarProfiles'
 
 /**
  * Player car: links the physics to the visual model,
@@ -22,9 +23,12 @@ export class Car {
     private body_roll: number = 0
     private brake_level: number = 0
 
-    constructor(gltf: GLTF) {
-        this.model = new CarModel(gltf)
-        this.physics = new CarPhysics(this.model.wheelbase, this.model.width, this.model.length)
+    readonly profile: CarProfile
+
+    constructor(gltf: GLTF, profile: CarProfile) {
+        this.profile = profile
+        this.model = new CarModel(gltf, profile.look)
+        this.physics = new CarPhysics(this.model.wheelbase, this.model.width, this.model.length, profile.spec)
         // Shadow is attached to the root, not the body: it lies on the ground and does not sway with the suspension
         this.contact_shadow = new CarContactShadow(this.model.width, this.model.length)
         this.model.root.add(this.contact_shadow.mesh)
@@ -68,11 +72,15 @@ export class Car {
         this.contact_shadow.update(p.grounded, dt)
 
         // Body: dive under braking, squat under acceleration, roll in corners, jolt on landing
-        const target_pitch: number = MathUtils.clamp(-p.long_accel * 0.006, -0.05, 0.05)
-        const target_roll: number = MathUtils.clamp(p.lat_accel * 0.0045, -0.05, 0.05)
+        // A soft classic suspension leans further and settles slower
+        const softness: number = this.profile.spec.body_softness
+        const limit: number = 0.05 * Math.min(softness, 1.8)
+        const target_pitch: number = MathUtils.clamp(-p.long_accel * 0.006 * softness, -limit, limit)
+        const target_roll: number = MathUtils.clamp(p.lat_accel * 0.0045 * softness, -limit, limit)
         if (dt > 0) {
-            this.body_pitch = MathUtils.damp(this.body_pitch, target_pitch, 6, dt)
-            this.body_roll = MathUtils.damp(this.body_roll, target_roll, 6, dt)
+            const lambda: number = 6 / Math.sqrt(softness)
+            this.body_pitch = MathUtils.damp(this.body_pitch, target_pitch, lambda, dt)
+            this.body_roll = MathUtils.damp(this.body_roll, target_roll, lambda, dt)
         }
         this.model.body.rotation.set(this.body_pitch, 0, this.body_roll)
         this.model.body.position.y = -p.landing_impact * 0.08
@@ -90,5 +98,10 @@ export class Car {
             const local_z: number = wheel.steer.position.z
             wheel.steer.position.y = wheel.rest_y - this.model.body.position.y - local_x * this.body_roll + local_z * this.body_pitch
         }
+    }
+
+    /** The contact shadow hangs under the model root, so disposing the model frees it too */
+    dispose(): void {
+        this.model.dispose()
     }
 }

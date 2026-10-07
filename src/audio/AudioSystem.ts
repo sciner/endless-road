@@ -129,11 +129,11 @@ export class AudioSystem {
         this.wind_gain.gain.setTargetAtTime(WIND_VOLUME * wind, now, 0.6)
     }
 
-    update(rpm: number, throttle: number, speed: number, slip: number): void {
+    /** firing_per_rev: engine pulses per crankshaft revolution (3 for a flat-six, 2 for an inline-four) */
+    update(rpm: number, throttle: number, speed: number, slip: number, firing_per_rev: number): void {
         if (!this.context || !this.engine_filter || !this.engine_gain || !this.tire_gain || !this.tire_filter) return
         const now: number = this.context.currentTime
-        // Flat-six: three firings per crankshaft revolution
-        const base: number = (rpm / 60) * 3
+        const base: number = (rpm / 60) * firing_per_rev
         const ratios: number[] = [1, 0.5, 1.007, 2]
         for (let i: number = 0; i < this.engine_oscillators.length; i++) {
             this.engine_oscillators[i].frequency.setTargetAtTime(base * ratios[i], now, 0.03)

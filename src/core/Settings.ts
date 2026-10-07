@@ -1,5 +1,7 @@
 import { BIOMES, DEFAULT_ENVIRONMENT, EnvironmentSettings, TIMES, WEATHERS } from '../environment/EnvironmentTypes'
 import { Lang, LanguageCode } from '../i18n/Lang'
+import { QualityChoice, QualityPresets } from '../render/QualityPresets'
+import { CAR_IDS, CarId } from '../vehicle/CarProfiles'
 
 /** User settings that survive a page reload */
 export interface SettingsData {
@@ -8,6 +10,8 @@ export interface SettingsData {
     debug_visible: boolean
     muted: boolean
     language: LanguageCode
+    car: CarId
+    quality: QualityChoice
     environment: EnvironmentSettings
 }
 
@@ -18,6 +22,8 @@ const DEFAULTS: Omit<SettingsData, 'language'> = {
     help_visible: true,
     debug_visible: false,
     muted: false,
+    car: 'porsche',
+    quality: 'auto',
     environment: DEFAULT_ENVIRONMENT,
 }
 
@@ -52,6 +58,14 @@ export class Settings {
         return this.data.language
     }
 
+    get car(): CarId {
+        return this.data.car
+    }
+
+    get quality(): QualityChoice {
+        return this.data.quality
+    }
+
     get environment(): EnvironmentSettings {
         return { ...this.data.environment }
     }
@@ -81,6 +95,8 @@ export class Settings {
             muted: typeof stored.muted === 'boolean' ? stored.muted : DEFAULTS.muted,
             // Without a saved choice the language follows the browser
             language: Lang.isSupported(stored.language) ? stored.language : Lang.detect(),
+            car: CAR_IDS.includes(stored.car as CarId) ? stored.car as CarId : DEFAULTS.car,
+            quality: QualityPresets.isChoice(stored.quality) ? stored.quality : DEFAULTS.quality,
             environment: Settings.readEnvironment(stored.environment),
         }
     }

@@ -44,6 +44,12 @@ export const pt: LangStrings = {
     option_time: 'Hora do dia',
     option_weather: 'Clima',
     option_biome: 'Paisagem',
+    option_car: 'Carro',
+    option_quality: 'Qualidade gráfica',
+    quality_auto: 'Automática',
+    quality_low: 'Baixa',
+    quality_medium: 'Média',
+    quality_high: 'Alta',
     on: 'Lig.',
     off: 'Desl.',
 

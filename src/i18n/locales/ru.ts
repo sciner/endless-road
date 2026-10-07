@@ -44,6 +44,12 @@ export const ru: LangStrings = {
     option_time: 'Время суток',
     option_weather: 'Погода',
     option_biome: 'Местность',
+    option_car: 'Машина',
+    option_quality: 'Качество графики',
+    quality_auto: 'Авто',
+    quality_low: 'Низкое',
+    quality_medium: 'Среднее',
+    quality_high: 'Высокое',
     on: 'Вкл',
     off: 'Выкл',
 

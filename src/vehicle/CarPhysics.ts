@@ -5,18 +5,9 @@ import { DrivePoint, WorldSurface } from '../world/WorldSurface'
 import { RAIL_OFFSET } from '../world/WorldConfig'
 import { Vegetation } from '../world/Vegetation'
 import { SteeringAssist } from './SteeringAssist'
+import { CarSpec } from './CarProfiles'
 
 const GRAVITY: number = 9.81
-const MAX_SPEED: number = 74
-const REVERSE_SPEED: number = 13
-const ENGINE_ACCEL: number = 8.2
-const BRAKE_DECEL: number = 12.5
-/** Per-gear speed "ceilings", m/s */
-const GEAR_TOP: number[] = [14, 25, 37, 50, 62, 74]
-/** Grip gain from downforce per speed squared: ~2.3g at 145 km/h, ~4.2g at 215 km/h */
-const DOWNFORCE: number = 0.0009
-export const IDLE_RPM: number = 950
-const REDLINE_RPM: number = 7000
 
 /**
  * Arcade car physics based on the bicycle model:
@@ -36,7 +27,7 @@ export class CarPhysics {
     pitch: number = 0
     roll: number = 0
     gear: number = 1
-    rpm: number = IDLE_RPM
+    rpm: number
     /** Longitudinal and lateral acceleration for body tilt */
     long_accel: number = 0
     lat_accel: number = 0
@@ -67,7 +58,11 @@ export class CarPhysics {
     private half_length: number
     private landing: number = 0
 
-    constructor(wheelbase: number, width: number, length: number) {
+    readonly spec: CarSpec
+
+    constructor(wheelbase: number, width: number, length: number, spec: CarSpec) {
+        this.spec = spec
+        this.rpm = spec.idle_rpm
         this.wheelbase = wheelbase
         this.half_width = width * 0.5
         this.half_length = length * 0.5
@@ -122,22 +117,23 @@ export class CarPhysics {
         const speed: number = Math.abs(v_long)
 
         // Steering: max angle shrinks as speed grows, for stability
-        const max_steer: number = 0.6 / (1 + speed * 0.035)
+        const spec: CarSpec = this.spec
+        const max_steer: number = spec.max_steer / (1 + speed * 0.035)
         const shaped: number = this.assist.shape(input, speed, dt)
         this.steer = MathUtils.damp(this.steer, shaped * max_steer, 18, dt)
 
-        const grip: number = (this.on_road ? 1.0 : 0.62) * this.surface_grip
+        const grip: number = (this.on_road ? 1.0 : 0.62) * this.surface_grip * spec.grip
         const traction: number = this.grounded ? 1 : 0
 
         // Longitudinal dynamics: throttle, brake/reverse, drag
         let accel: number = 0
         if (input.throttle > 0) {
-            if (v_long < -0.5) accel += BRAKE_DECEL * input.throttle
-            else accel += ENGINE_ACCEL * input.throttle * (1 - Math.pow(Math.max(0, v_long) / MAX_SPEED, 2)) * (this.on_road ? 1 : 0.7)
+            if (v_long < -0.5) accel += spec.brake_decel * input.throttle
+            else accel += spec.engine_accel * input.throttle * (1 - Math.pow(Math.max(0, v_long) / spec.max_speed, 2)) * (this.on_road ? 1 : 0.7)
         }
         if (input.brake > 0) {
-            if (v_long > 0.5) accel -= BRAKE_DECEL * input.brake * grip
-            else accel -= ENGINE_ACCEL * 0.6 * input.brake * (1 - Math.min(1, Math.max(0, -v_long) / REVERSE_SPEED))
+            if (v_long > 0.5) accel -= spec.brake_decel * input.brake * grip
+            else accel -= spec.engine_accel * 0.6 * input.brake * (1 - Math.min(1, Math.max(0, -v_long) / spec.reverse_speed))
         }
         const drag: number = 0.35 + 0.00042 * v_long * v_long + (this.on_road ? 0 : 1.4 + 0.0035 * v_long * v_long)
         if (Math.abs(v_long) > 0.05) accel -= Math.sign(v_long) * drag
@@ -152,7 +148,7 @@ export class CarPhysics {
         // Turning: bicycle-model target yaw rate, limited by grip
         let yaw_target: number = (v_long * Math.tan(this.steer)) / this.wheelbase
         // Lateral acceleration limit grows with downforce, otherwise the turning radius becomes huge at speed
-        const downforce: number = 1 + DOWNFORCE * speed * speed * (this.on_road ? 1 : 0.5)
+        const downforce: number = 1 + spec.downforce * speed * speed * (this.on_road ? 1 : 0.5)
         // Track steering assist only when moving forward; while it helps, grip is slightly above normal
         const assist_active: boolean = v_long > 0 && !input.handbrake && this.on_road && this.grounded
         yaw_target += this.assist.yawAssist(surface, this.position, this.yaw, speed, shaped, assist_active, dt)
@@ -172,7 +168,7 @@ export class CarPhysics {
         const world_z: number = fz * v_long + rz * v_lat
         v_long = world_x * nfx + world_z * nfz
         v_lat = world_x * nrx + world_z * nrz
-        const lateral_grip: number = (input.handbrake ? 1.1 : this.on_road ? 7.5 : 4.2) * traction * this.surface_grip
+        const lateral_grip: number = (input.handbrake ? 1.1 : this.on_road ? 7.5 : 4.2) * traction * this.surface_grip * spec.grip
         const lat_before: number = v_lat
         v_lat *= Math.exp(-lateral_grip * dt)
         this.slip = MathUtils.damp(this.slip, MathUtils.clamp(Math.abs(lat_before) / 6, 0, 1), 8, dt)
@@ -316,22 +312,26 @@ export class CarPhysics {
     }
 
     private updateGearbox(dt: number, v_long: number, input: DriveInput): void {
+        const spec: CarSpec = this.spec
+        const gears: number[] = spec.gear_top
         const speed: number = Math.abs(v_long)
         if (v_long < -0.5) {
             this.gear = -1
         } else {
             if (this.gear < 1) this.gear = 1
-            const top: number = GEAR_TOP[this.gear - 1]
-            const bottom: number = this.gear > 1 ? GEAR_TOP[this.gear - 2] : 0
-            if (speed > top * 0.97 && this.gear < GEAR_TOP.length) this.gear++
+            const top: number = gears[this.gear - 1]
+            const bottom: number = this.gear > 1 ? gears[this.gear - 2] : 0
+            if (speed > top * 0.97 && this.gear < gears.length) this.gear++
             else if (speed < bottom * 0.72 && this.gear > 1) this.gear--
         }
         const gear_index: number = Math.max(1, this.gear)
-        const top: number = this.gear < 0 ? REVERSE_SPEED : GEAR_TOP[gear_index - 1]
-        const bottom: number = this.gear > 1 ? GEAR_TOP[gear_index - 2] * 0.55 : 0
+        const top: number = this.gear < 0 ? spec.reverse_speed : gears[gear_index - 1]
+        const bottom: number = this.gear > 1 ? gears[gear_index - 2] * 0.55 : 0
         const ratio: number = MathUtils.clamp((speed - bottom) / (top - bottom), 0, 1)
-        let target: number = IDLE_RPM + ratio * (REDLINE_RPM - IDLE_RPM)
-        if (input.throttle > 0 && speed < 3) target = Math.max(target, 2800)
+        const range: number = spec.redline_rpm - spec.idle_rpm
+        let target: number = spec.idle_rpm + ratio * range
+        // Launch: the clutch slips and holds the engine around a third of its range
+        if (input.throttle > 0 && speed < 3) target = Math.max(target, spec.idle_rpm + range * 0.33)
         this.rpm = MathUtils.damp(this.rpm, target, 10, dt)
     }
 }

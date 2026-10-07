@@ -1,6 +1,7 @@
 import {
     ACESFilmicToneMapping, PCFShadowMap, PMREMGenerator, Scene, SRGBColorSpace, Texture, Vector3, WebGLRenderer,
 } from 'three'
+import { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { Input, DriveInput } from './core/Input'
 import { Settings } from './core/Settings'
 import { EnvironmentSystem } from './environment/EnvironmentSystem'
@@ -19,14 +20,22 @@ import { AudioSystem } from './audio/AudioSystem'
 import { Hud } from './ui/Hud'
 import { DebugOverlay, DebugSnapshot } from './ui/DebugOverlay'
 import { MainMenu, MenuOption } from './ui/MainMenu'
-import { IDLE_RPM } from './vehicle/CarPhysics'
+import { QUALITY_CHOICES, QualityChoice, QualityLevel, QualityPreset, QualityPresets } from './render/QualityPresets'
 import { Car } from './vehicle/Car'
+import { CAR_IDS, CAR_PROFILES, CarId, CarProfile } from './vehicle/CarProfiles'
 import { CarWheel } from './vehicle/CarModel'
 import { World } from './world/World'
 import { WORLD_SEED } from './world/WorldConfig'
 
 const PHYSICS_STEP: number = 1 / 120
 const MAX_SUBSTEPS: number = 8
+
+function qualityName(choice: QualityChoice): string {
+    const names: Record<QualityChoice, string> = {
+        auto: lang.quality_auto, low: lang.quality_low, medium: lang.quality_medium, high: lang.quality_high,
+    }
+    return names[choice]
+}
 
 /** menu is the title menu before the start, paused is the menu over a drive in progress */
 type GameState = 'menu' | 'playing' | 'paused'
@@ -62,13 +71,18 @@ export class Game {
     private last_impact: number = 0
     private odometer: number = 0
     private last_position: Vector3 = new Vector3()
-    private pixel_ratio: number = Math.min(window.devicePixelRatio, 1.5)
+    private pixel_ratio: number = 1
+    private quality: QualityPreset
+    /** Set while a new car model is loading, so repeated menu presses don't start parallel loads */
+    private car_loading: boolean = false
 
     constructor(root: HTMLElement) {
         this.root = root
         // The language is applied before any UI is built
         Lang.set(this.settings.language)
         this.renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
+        this.quality = QualityPresets.preset(QualityPresets.resolve(this.settings.quality, this.renderer))
+        this.pixel_ratio = Math.min(window.devicePixelRatio, this.quality.pixel_ratio)
         this.renderer.setPixelRatio(this.pixel_ratio)
         this.renderer.setSize(window.innerWidth, window.innerHeight)
         this.renderer.outputColorSpace = SRGBColorSpace
@@ -90,6 +104,7 @@ export class Game {
         this.debug.setVisible(this.settings.debug_visible)
         this.audio.setMuted(this.settings.muted)
         this.menu = new MainMenu(root, {
+            main: [this.carOption()],
             settings: this.menuOptions(),
             environment: this.environmentOptions(),
             on_play: (): void => this.play(),
@@ -120,6 +135,15 @@ export class Game {
                 change: (direction: number): void => {
                     const index: number = LANGUAGES.indexOf(Lang.code)
                     this.setLanguage(LANGUAGES[(index + direction + LANGUAGES.length) % LANGUAGES.length])
+                },
+            },
+            {
+                label: (): string => lang.option_quality,
+                value: (): string => qualityName(this.settings.quality),
+                change: (direction: number): void => {
+                    const index: number = QUALITY_CHOICES.indexOf(this.settings.quality)
+                    const count: number = QUALITY_CHOICES.length
+                    this.setQuality(QUALITY_CHOICES[(index + direction + count) % count])
                 },
             },
             {
@@ -180,6 +204,80 @@ export class Game {
         ]
     }
 
+    /** Car choice on the main menu screen */
+    private carOption(): MenuOption {
+        return {
+            label: (): string => lang.option_car,
+            value: (): string => CAR_PROFILES[this.settings.car].name,
+            change: (direction: number): void => {
+                const index: number = CAR_IDS.indexOf(this.settings.car)
+                const id: CarId = CAR_IDS[(index + direction + CAR_IDS.length) % CAR_IDS.length]
+                // During loading only the choice changes; the load picks it up when it finishes
+                if (this.car_loading) {
+                    this.settings.update({ car: id })
+                    this.menu.applyLanguage()
+                    return
+                }
+                void this.swapCar(id)
+            },
+        }
+    }
+
+    /**
+     * Replaces the car with another model at the same place on the road.
+     * The choice is saved right away so the menu shows it while the model loads
+     */
+    private async swapCar(id: CarId): Promise<void> {
+        this.settings.update({ car: id })
+        this.menu.applyLanguage()
+        this.car_loading = true
+        try {
+            const profile: CarProfile = CAR_PROFILES[id]
+            const gltf: GLTF = await AssetLibrary.loadCar(profile.look.model_path)
+            // The player could switch again during loading: only the last choice is kept
+            if (this.settings.car !== id) return
+            const old_car: Car = this.car
+            const car: Car = new Car(gltf, profile)
+            car.placeOnRoad(this.world.surface, old_car.position.x, old_car.position.z)
+            car.model.setHeadlightShadows(this.quality.headlight_shadows)
+            this.scene.remove(old_car.model.root)
+            old_car.dispose()
+            this.car = car
+            this.scene.add(car.model.root)
+            this.environment.setCar(car)
+            this.last_position.copy(car.position)
+            this.camera_rig.snap()
+            await this.renderer.compileAsync(this.scene, this.camera_rig.camera)
+        } catch (error: unknown) {
+            // A failed load leaves the current car and its choice in place
+            console.error(error)
+            this.settings.update({ car: this.car.profile.id })
+            this.menu.applyLanguage()
+        } finally {
+            this.car_loading = false
+        }
+        // The player switched again during loading: catch up with the latest choice
+        if (this.settings.car !== this.car.profile.id) void this.swapCar(this.settings.car)
+    }
+
+    /** Applies a quality preset live: resolution, shadows, bloom and anti-aliasing */
+    private setQuality(choice: QualityChoice): void {
+        this.settings.update({ quality: choice })
+        const level: QualityLevel = QualityPresets.resolve(choice, this.renderer)
+        this.quality = QualityPresets.preset(level)
+        this.applyQuality()
+        this.menu.applyLanguage()
+    }
+
+    private applyQuality(): void {
+        this.pixel_ratio = Math.min(window.devicePixelRatio, this.quality.pixel_ratio)
+        this.renderer.setPixelRatio(this.pixel_ratio)
+        this.lighting.setShadowQuality(this.quality.shadow_map, this.quality.shadow_extent)
+        this.car.model.setHeadlightShadows(this.quality.headlight_shadows)
+        if (this.post) this.post.setQuality(this.quality.bloom, this.quality.msaa)
+        this.resize()
+    }
+
     /** Switches the UI language on the fly and remembers the choice */
     private setLanguage(code: LanguageCode): void {
         Lang.set(code)
@@ -234,11 +332,12 @@ export class Game {
         const assets: AssetLibrary = new AssetLibrary(anisotropy, (ratio: number): void => {
             this.hud.setLoading(ratio * 0.6, lang.loading_assets)
         })
-        await assets.load()
+        const profile: CarProfile = CAR_PROFILES[this.settings.car]
+        await assets.load(profile.look.model_path)
 
         this.setupScene(assets)
         this.world = new World(this.scene, assets, anisotropy, WORLD_SEED)
-        this.car = new Car(assets.car)
+        this.car = new Car(assets.car, profile)
         this.scene.add(this.car.model.root)
         this.particles.add(this.precipitation.mesh)
         this.particles.add(this.spray.points)
@@ -268,7 +367,7 @@ export class Game {
 
         this.post = new PostProcessing(this.renderer, this.scene, this.particles, this.camera_rig.camera)
         this.environment.syncPost()
-        this.resize()
+        this.applyQuality()
 
         this.hud.setLoading(0.97, lang.loading_shaders)
         await this.renderer.compileAsync(this.scene, this.camera_rig.camera)
@@ -349,8 +448,9 @@ export class Game {
 
         this.hud.update(this.car.physics.speed, this.car.physics.gear, this.car.physics.rpm, this.odometer)
         // In the menu the engine idles and the tires are silent
-        if (playing) this.audio.update(this.car.physics.rpm, drive.throttle, this.car.physics.speed, this.car.physics.slip)
-        else this.audio.update(IDLE_RPM, 0, 0, 0)
+        const firing: number = this.car.physics.spec.firing_per_rev
+        if (playing) this.audio.update(this.car.physics.rpm, drive.throttle, this.car.physics.speed, this.car.physics.slip, firing)
+        else this.audio.update(this.car.physics.spec.idle_rpm, 0, 0, 0, firing)
 
         // The panel reads the full stats of the previous frame (shadows + scene + post-processing), then they are reset
         this.debug.update(dt, (): DebugSnapshot => ({

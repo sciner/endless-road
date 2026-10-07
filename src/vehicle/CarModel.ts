@@ -1,8 +1,9 @@
 import {
     Box3, Color, Group, IUniform, Material, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D,
-    PointLight, SpotLight, Vector3, WebGLProgramParametersWithUniforms,
+    PointLight, SpotLight, Texture, Vector3, WebGLProgramParametersWithUniforms,
 } from 'three'
 import { GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import { CarLook } from './CarProfiles'
 import { SHADOW_LAYER } from '../world/Vegetation'
 import { WheelAxle } from './WheelAxle'
 
@@ -18,15 +19,11 @@ export interface CarWheel {
     rest_y: number
 }
 
-/** Real length of the Porsche 911 (930) Turbo, m */
-const CAR_LENGTH: number = 4.29
-const WHEEL_MATERIALS: string[] = ['930_rim', '930_tire']
-const LIGHT_MATERIALS: string[] = ['930_lights', '930_lights_refraction']
 /** Headlight spotlight intensity at night, cd */
 const HEADLIGHT_INTENSITY: number = 320
 
 /**
- * Porsche 911 visual model: glTF normalization, wheels, headlights and brake lights.
+ * Car visual model described by a profile: glTF normalization, wheels, headlights and brake lights.
  * Local coordinate system: forward +Z, up +Y, tire bottoms at y = 0.
  */
 export class CarModel {
@@ -34,17 +31,21 @@ export class CarModel {
     /** Body, tilted by the suspension independently of the root */
     readonly body: Group = new Group()
     readonly wheels: CarWheel[] = []
-    readonly length: number = CAR_LENGTH
+    readonly length: number
     width: number = 1.8
     wheelbase: number = 2.27
 
+    private look: CarLook
     private brake_uniform: IUniform<number> = { value: 0 }
     private tail_lights: PointLight[] = []
     private head_lights: SpotLight[] = []
     private light_level: number = 1
+    private headlight_shadows: boolean = true
 
-    constructor(gltf: GLTF) {
-        this.root.name = 'porsche-911'
+    constructor(gltf: GLTF, look: CarLook) {
+        this.look = look
+        this.length = look.length
+        this.root.name = 'player-car'
         this.root.add(this.body)
         const model: Object3D = gltf.scene
         this.body.add(model)
@@ -74,19 +75,22 @@ export class CarModel {
      * because the source contains helper meshes with outlier coordinates.
      */
     private normalize(model: Object3D): void {
+        const bounds_materials: string[] = [...this.look.body_materials, this.look.tire_material]
         model.updateMatrixWorld(true)
-        const box: Box3 = this.measure(model, ['coat', 'paint', ...WHEEL_MATERIALS])
+        const box: Box3 = this.measure(model, bounds_materials)
         const size: Vector3 = box.getSize(new Vector3())
 
-        // The car's long axis must run along Z
-        if (size.x > size.z) model.rotation.y = Math.PI / 2
+        // The car's long axis must run along Z; a known nose direction is turned to +Z directly
+        if (this.look.nose === 'x-') model.rotation.y = Math.PI / 2
+        else if (this.look.nose === 'x+') model.rotation.y = -Math.PI / 2
+        else if (size.x > size.z) model.rotation.y = Math.PI / 2
         model.updateMatrixWorld(true)
 
-        // The 911 is rear-engined and its rear overhang is noticeably longer than the front:
+        // A rear-engined car has a noticeably longer rear overhang:
         // the nose is where the wheels are closer to the body edge
         const wheels: Box3[] = this.wheelBoxes(model)
-        const body: Box3 = this.measure(model, ['coat', 'paint'])
-        if (wheels.length >= 4) {
+        const body: Box3 = this.measure(model, this.look.body_materials)
+        if (this.look.nose === null && wheels.length >= 4) {
             let overhang_plus: number = Infinity
             let overhang_minus: number = Infinity
             for (let i: number = 0; i < wheels.length; i++) {
@@ -98,13 +102,13 @@ export class CarModel {
         }
         model.updateMatrixWorld(true)
 
-        const oriented: Box3 = this.measure(model, ['coat', 'paint', ...WHEEL_MATERIALS])
+        const oriented: Box3 = this.measure(model, bounds_materials)
         const oriented_size: Vector3 = oriented.getSize(new Vector3())
-        const scale: number = CAR_LENGTH / oriented_size.z
+        const scale: number = this.length / oriented_size.z
         model.scale.multiplyScalar(scale)
         model.updateMatrixWorld(true)
 
-        const scaled: Box3 = this.measure(model, ['coat', 'paint', ...WHEEL_MATERIALS])
+        const scaled: Box3 = this.measure(model, bounds_materials)
         const center: Vector3 = scaled.getCenter(new Vector3())
         model.position.set(-center.x, -scaled.min.y, -center.z)
         model.updateMatrixWorld(true)
@@ -115,12 +119,12 @@ export class CarModel {
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
             if (!mesh.isMesh) return
-            if (CarModel.materialName(mesh) === 'material_0') {
+            if (this.look.hidden_materials.indexOf(CarModel.materialName(mesh)) >= 0) {
                 mesh.visible = false
                 return
             }
             const mesh_box: Box3 = new Box3().setFromObject(mesh)
-            if (!limit.containsBox(mesh_box) && mesh_box.getSize(new Vector3()).length() > CAR_LENGTH * 1.6) mesh.visible = false
+            if (!limit.containsBox(mesh_box) && mesh_box.getSize(new Vector3()).length() > this.length * 1.6) mesh.visible = false
         })
     }
 
@@ -137,7 +141,7 @@ export class CarModel {
         const boxes: Box3[] = []
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
-            if (mesh.isMesh && CarModel.materialName(mesh) === '930_tire') boxes.push(new Box3().setFromObject(mesh))
+            if (mesh.isMesh && CarModel.materialName(mesh) === this.look.tire_material) boxes.push(new Box3().setFromObject(mesh))
         })
         return boxes
     }
@@ -149,7 +153,7 @@ export class CarModel {
             if (!mesh.isMesh) return
             const source: MeshStandardMaterial = mesh.material as MeshStandardMaterial
             const name: string = source.name
-            if (name === 'paint' || name === 'coat') {
+            if (this.look.paint_materials.indexOf(name) >= 0) {
                 const paint: MeshPhysicalMaterial = new MeshPhysicalMaterial()
                 MeshStandardMaterial.prototype.copy.call(paint, source)
                 paint.clearcoat = 1
@@ -157,16 +161,19 @@ export class CarModel {
                 paint.envMapIntensity = 1.4
                 paint.name = name
                 mesh.material = paint
-            } else if (name === 'glass') {
+            } else if (this.look.glass_materials.indexOf(name) >= 0) {
+                // Transmission would add a whole extra scene pass; plain transparency looks the same here
+                const physical: MeshPhysicalMaterial = source as MeshPhysicalMaterial
+                if (physical.isMeshPhysicalMaterial) physical.transmission = 0
                 source.transparent = true
                 source.opacity = 0.42
                 source.roughness = 0.02
                 source.metalness = 0
                 source.envMapIntensity = 1.6
                 source.depthWrite = false
-            } else if (name === '930_chromes') {
+            } else if (this.look.chrome_materials.indexOf(name) >= 0) {
                 source.envMapIntensity = 1.5
-            } else if (name === '930_tire') {
+            } else if (name === this.look.tire_material) {
                 source.envMapIntensity = 0.5
             }
         })
@@ -185,10 +192,10 @@ export class CarModel {
         const clusters: Cluster[] = []
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
-            if (!mesh.isMesh || WHEEL_MATERIALS.indexOf(CarModel.materialName(mesh)) < 0) return
+            if (!mesh.isMesh || this.look.wheel_materials.indexOf(CarModel.materialName(mesh)) < 0) return
             const box: Box3 = new Box3().setFromObject(mesh).applyMatrix4(inverse_root)
             const center: Vector3 = box.getCenter(new Vector3())
-            const is_tire: boolean = CarModel.materialName(mesh) === '930_tire'
+            const is_tire: boolean = CarModel.materialName(mesh) === this.look.tire_material
             let cluster: Cluster | undefined = clusters.find((c: Cluster): boolean => c.center.distanceTo(center) < 0.45)
             if (!cluster) {
                 cluster = { center: center.clone(), meshes: [], radius: 0, tire: null }
@@ -258,9 +265,14 @@ export class CarModel {
         const brake: IUniform<number> = this.brake_uniform
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
-            if (!mesh.isMesh || LIGHT_MATERIALS.indexOf(CarModel.materialName(mesh)) < 0) return
+            if (!mesh.isMesh || !this.look.isLamp(mesh, CarModel.materialName(mesh))) return
             const source: MeshStandardMaterial = mesh.material as MeshStandardMaterial
             const material: MeshStandardMaterial = source.clone()
+            if (this.look.opaque_lamps) {
+                material.transparent = false
+                material.opacity = 1
+                material.depthWrite = true
+            }
             material.emissive = new Color(1, 1, 1)
             material.emissiveMap = source.map
             material.emissiveIntensity = 1
@@ -291,12 +303,12 @@ export class CarModel {
 
     /** Actual light sources: two headlight spotlights and red taillight glow */
     private createLights(): void {
-        const front_z: number = this.length * 0.5 + 0.05
+        const front_z: number = this.length * 0.5 - this.look.headlight.inset
         for (let side: number = -1; side <= 1; side += 2) {
             const light: SpotLight = new SpotLight(0xfff1dc, HEADLIGHT_INTENSITY, 140, 0.46, 0.6, 1.5)
-            light.position.set(side * 0.62, 0.72, front_z)
+            light.position.set(side * this.look.headlight.x, this.look.headlight.y, front_z)
             light.target.position.set(side * 0.9, -0.6, front_z + 30)
-            light.castShadow = side < 0
+            light.castShadow = side < 0 && this.headlight_shadows
             light.shadow.mapSize.set(1024, 1024)
             light.shadow.bias = -0.0004
             light.shadow.normalBias = 0.02
@@ -309,7 +321,7 @@ export class CarModel {
         }
         for (let side: number = -1; side <= 1; side += 2) {
             const tail: PointLight = new PointLight(0xff1a0a, 2.5, 10, 1.4)
-            tail.position.set(side * 0.6, 0.75, -this.length * 0.5 - 0.9)
+            tail.position.set(side * this.look.taillight.x, this.look.taillight.y, -this.length * 0.5 + this.look.taillight.inset)
             this.root.add(tail)
             this.tail_lights.push(tail)
         }
@@ -325,5 +337,28 @@ export class CarModel {
     setHeadlightLevel(level: number): void {
         this.light_level = level
         for (let i: number = 0; i < this.head_lights.length; i++) this.head_lights[i].intensity = HEADLIGHT_INTENSITY * level
+    }
+
+    /** The headlight shadow is a full extra scene pass, so low quality presets turn it off */
+    setHeadlightShadows(enabled: boolean): void {
+        this.headlight_shadows = enabled
+        this.head_lights[0].castShadow = enabled
+    }
+
+    /** Releases GPU resources of the model when the car is replaced */
+    dispose(): void {
+        this.root.traverse((object: Object3D): void => {
+            const mesh: Mesh = object as Mesh
+            if (!mesh.isMesh) return
+            mesh.geometry.dispose()
+            const materials: Material[] = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+            for (let i: number = 0; i < materials.length; i++) {
+                const material: MeshStandardMaterial = materials[i] as MeshStandardMaterial
+                const textures: Array<Texture | null> = [material.map, material.normalMap, material.roughnessMap, material.metalnessMap, material.emissiveMap, material.aoMap]
+                for (let t: number = 0; t < textures.length; t++) textures[t]?.dispose()
+                material.dispose()
+            }
+        })
+        for (let i: number = 0; i < this.head_lights.length; i++) this.head_lights[i].shadow.map?.dispose()
     }
 }

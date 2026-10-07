@@ -142,6 +142,13 @@ export class EnvironmentSystem {
         this.road_environment = texture
     }
 
+    /** A replaced car gets the current headlight level and weather grip */
+    setCar(car: Car): void {
+        this.targets.car = car
+        car.model.setHeadlightLevel(this.look.headlights)
+        car.physics.surface_grip = this.look.grip
+    }
+
     /** Applies post-processing if it appeared after the first apply */
     syncPost(): void {
         const post: PostProcessing | null = this.targets.post()

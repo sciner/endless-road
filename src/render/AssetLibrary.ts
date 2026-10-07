@@ -35,7 +35,12 @@ export class AssetLibrary {
         }
     }
 
-    async load(): Promise<void> {
+    /** Loads a car model on its own: used to swap cars after the initial loading */
+    static loadCar(model_path: string): Promise<GLTF> {
+        return new GLTFLoader().loadAsync(model_path)
+    }
+
+    async load(car_path: string): Promise<void> {
         const gltf_loader: GLTFLoader = new GLTFLoader(this.manager)
         const texture_loader: TextureLoader = new TextureLoader(this.manager)
         const hdr_loader: HDRLoader = new HDRLoader(this.manager)
@@ -57,7 +62,7 @@ export class AssetLibrary {
         }
 
         const [car, fern, fern_alpha, asphalt, grass, sand, snow, rock, bark, environment] = await Promise.all([
-            gltf_loader.loadAsync('models/porsche911/scene.gltf'),
+            gltf_loader.loadAsync(car_path),
             gltf_loader.loadAsync('models/fern_02/fern_02.gltf'),
             texture_loader.loadAsync('models/fern_02/textures/fern_02_alpha_1k.jpg'),
             pbr('asphalt_02'),

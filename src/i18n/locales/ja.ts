@@ -44,6 +44,12 @@ export const ja: LangStrings = {
     option_time: '時間帯',
     option_weather: '天気',
     option_biome: '地形',
+    option_car: '車',
+    option_quality: '画質',
+    quality_auto: '自動',
+    quality_low: '低',
+    quality_medium: '中',
+    quality_high: '高',
     on: 'オン',
     off: 'オフ',
 

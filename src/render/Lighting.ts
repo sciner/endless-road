@@ -5,9 +5,6 @@ import { SHADOW_LAYER } from '../world/Vegetation'
 /** Distance from the focus point to the directional light, m */
 const SUN_DISTANCE: number = 90
 const UP: Vector3 = new Vector3(0, 1, 0)
-/** Shadow area: half-size, m, and map resolution (~2.5 cm per texel) */
-const SHADOW_HALF_SIZE: number = 38
-const SHADOW_MAP_SIZE: number = 3072
 /** Forward offset of the shadow center: the camera looks ahead, and shadows behind the car are barely visible */
 const SHADOW_LEAD: number = 12
 
@@ -23,6 +20,9 @@ export class Lighting {
     private light_dir: Vector3 = new Vector3()
     private light_u: Vector3 = new Vector3()
     private light_v: Vector3 = new Vector3()
+    /** Shadow area half size, m, and map resolution; set by the quality preset */
+    private shadow_extent: number = 38
+    private shadow_map_size: number = 3072
 
     constructor(scene: Scene) {
         this.hemisphere = new HemisphereLight(new Color(0x5674a8), new Color(0x0c110c), 0.6)
@@ -30,11 +30,7 @@ export class Lighting {
 
         this.sun = new DirectionalLight(new Color(0x9fb6ff), 0.55)
         this.sun.castShadow = true
-        this.sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
-        this.sun.shadow.camera.left = -SHADOW_HALF_SIZE
-        this.sun.shadow.camera.right = SHADOW_HALF_SIZE
-        this.sun.shadow.camera.top = SHADOW_HALF_SIZE
-        this.sun.shadow.camera.bottom = -SHADOW_HALF_SIZE
+        this.setShadowQuality(this.shadow_map_size, this.shadow_extent)
         this.sun.shadow.camera.near = 1
         this.sun.shadow.camera.far = 220
         this.sun.shadow.bias = -0.0004
@@ -43,6 +39,23 @@ export class Lighting {
         this.sun.shadow.camera.layers.enable(SHADOW_LAYER)
         scene.add(this.sun)
         scene.add(this.sun.target)
+    }
+
+    /** Resolution and area of the sun shadow; the old map is released and recreated on the next render */
+    setShadowQuality(map_size: number, extent: number): void {
+        this.shadow_map_size = map_size
+        this.shadow_extent = extent
+        const shadow: DirectionalLight['shadow'] = this.sun.shadow
+        shadow.mapSize.set(map_size, map_size)
+        shadow.camera.left = -extent
+        shadow.camera.right = extent
+        shadow.camera.top = extent
+        shadow.camera.bottom = -extent
+        shadow.camera.updateProjectionMatrix()
+        if (shadow.map) {
+            shadow.map.dispose()
+            shadow.map = null
+        }
     }
 
     setLook(look: EnvironmentLook): void {
@@ -71,7 +84,7 @@ export class Lighting {
         this.light_u.normalize()
         this.light_v.crossVectors(this.light_u, this.light_dir).normalize()
 
-        const texel: number = SHADOW_HALF_SIZE * 2 / SHADOW_MAP_SIZE
+        const texel: number = this.shadow_extent * 2 / this.shadow_map_size
         const u: number = Math.round(this.focus.dot(this.light_u) / texel) * texel
         const v: number = Math.round(this.focus.dot(this.light_v) / texel) * texel
         const d: number = this.focus.dot(this.light_dir)

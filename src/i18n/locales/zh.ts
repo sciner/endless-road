@@ -44,6 +44,12 @@ export const zh: LangStrings = {
     option_time: '时间',
     option_weather: '天气',
     option_biome: '地形',
+    option_car: '车辆',
+    option_quality: '画质',
+    quality_auto: '自动',
+    quality_low: '低',
+    quality_medium: '中',
+    quality_high: '高',
     on: '开',
     off: '关',
 

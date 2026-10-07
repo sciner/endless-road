@@ -9,6 +9,8 @@ export interface MenuOption {
 
 /** Menu content: setting lists and the actions the menu triggers */
 export interface MenuConfig {
+    /** Options shown right on the main screen, under the start button */
+    main: MenuOption[]
     settings: MenuOption[]
     environment: MenuOption[]
     on_play: () => void
@@ -163,6 +165,7 @@ export class MainMenu {
 
     private renderMain(): void {
         this.addButton(this.resumable ? lang.menu_resume : lang.menu_play, (): void => this.config.on_play())
+        this.addOptionRows(this.config.main)
         this.addButton(lang.menu_environment, (): void => this.render('environment'))
         this.addButton(lang.menu_settings, (): void => this.render('settings'))
         this.addButton(lang.menu_controls, (): void => this.render('controls'))
@@ -178,6 +181,10 @@ export class MainMenu {
 
     private renderOptions(title: string, options: MenuOption[]): void {
         this.addHeading(title)
+        this.addOptionRows(options)
+    }
+
+    private addOptionRows(options: MenuOption[]): void {
         for (let i: number = 0; i < options.length; i++) {
             const option: MenuOption = options[i]
             const row: HTMLElement = document.createElement('div')

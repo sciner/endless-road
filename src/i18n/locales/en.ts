@@ -43,6 +43,12 @@ export const en = {
     option_time: 'Time of day',
     option_weather: 'Weather',
     option_biome: 'Terrain',
+    option_car: 'Car',
+    option_quality: 'Graphics quality',
+    quality_auto: 'Auto',
+    quality_low: 'Low',
+    quality_medium: 'Medium',
+    quality_high: 'High',
     on: 'On',
     off: 'Off',
 
