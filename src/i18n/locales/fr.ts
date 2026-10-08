@@ -25,6 +25,8 @@ export const fr: LangStrings = {
     action_help: 'aide',
     action_debug: 'infos techniques',
     action_pause: 'pause et menu',
+    action_free_camera: 'caméra libre',
+    free_camera_hint: 'Caméra libre : souris pour regarder, WASD pour voler, Espace / Maj monter et descendre, Q plus vite, molette pour la vitesse, F10 retour',
     action_hide: 'masquer',
 
     menu_footer: '↑ ↓ choisir · Entrée / A valider · Échap / B retour',
@@ -67,6 +69,7 @@ export const fr: LangStrings = {
     weather_fog: 'Brouillard',
     biome_forest: 'Forêt',
     biome_autumn: 'Forêt d’automne',
+    biome_sakura: 'Cerisiers en fleurs',
     biome_desert: 'Désert',
 
     gamepad_connected: 'Manette connectée : {name}',

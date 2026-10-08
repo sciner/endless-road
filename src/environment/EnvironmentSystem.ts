@@ -8,6 +8,7 @@ import { SkyDome } from '../render/SkyDome'
 import { TireSpray } from '../render/TireSpray'
 import { WorldMaterials } from '../render/WorldMaterials'
 import { Car } from '../vehicle/Car'
+import { LeafLitter } from '../world/LeafLitter'
 import { Vegetation } from '../world/Vegetation'
 import { EnvironmentLook, EnvironmentLookBuilder } from './EnvironmentLook'
 import { Biome, BIOMES, EnvironmentSettings, TimeOfDay, TIMES, Weather } from './EnvironmentTypes'
@@ -22,6 +23,7 @@ export interface EnvironmentTargets {
     vegetation: Vegetation
     precipitation: Precipitation
     spray: TireSpray
+    leaves: LeafLitter
     audio: AudioSystem
     car: Car
     /** Post-processing is created later than the other systems */
@@ -41,6 +43,7 @@ const REFLECTION_BELOW: number = 0.05
 const WEATHER_WEIGHTS: Record<Biome, Array<[Weather, number]>> = {
     forest: [['clear', 0.3], ['rain', 0.3], ['snow', 0.2], ['fog', 0.2]],
     autumn: [['clear', 0.3], ['rain', 0.35], ['snow', 0.1], ['fog', 0.25]],
+    sakura: [['clear', 0.5], ['rain', 0.3], ['snow', 0.05], ['fog', 0.15]],
     desert: [['clear', 0.6], ['rain', 0.15], ['snow', 0.07], ['fog', 0.18]],
 }
 
@@ -121,6 +124,7 @@ export class EnvironmentSystem {
         const brightness: number = MathUtils.clamp(look.hemi_intensity * 0.75, 0.35, 1)
         t.precipitation.configure(look.precipitation, look.precipitation_alpha, brightness, look.headlights)
         t.spray.configure(look.spray_color, look.spray_amount, look.spray_off_road)
+        t.leaves.configure(look.litter, look.wind_leaves, look.leaf_size, look.leaf_palette)
         t.audio.setAmbience(look.rain_sound, look.wind_sound, look.wet_tires)
         t.car.model.setHeadlightLevel(look.headlights)
         t.car.physics.surface_grip = look.grip

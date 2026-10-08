@@ -24,6 +24,8 @@ export const en = {
     action_help: 'hints',
     action_debug: 'technical info',
     action_pause: 'pause and menu',
+    action_free_camera: 'free camera',
+    free_camera_hint: 'Free camera: mouse to look, WASD to fly, Space / Shift up and down, Q faster, wheel changes speed, F10 back',
     action_hide: 'hide',
 
     menu_footer: '↑ ↓ select · Enter / A confirm · Esc / B back',
@@ -66,6 +68,7 @@ export const en = {
     weather_fog: 'Fog',
     biome_forest: 'Forest',
     biome_autumn: 'Autumn forest',
+    biome_sakura: 'Cherry blossom',
     biome_desert: 'Desert',
 
     gamepad_connected: 'Gamepad connected: {name}',

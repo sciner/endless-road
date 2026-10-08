@@ -38,7 +38,7 @@ export class World {
         this.road = new RoadNetwork(seed, landscape)
         this.surface = new WorldSurface(this.road)
         this.materials = new WorldMaterials(assets, anisotropy)
-        this.road_renderer = new RoadRenderer(scene, this.road, this.materials)
+        this.road_renderer = new RoadRenderer(scene, this.surface, this.materials)
         this.terrain = new TerrainSystem(scene, this.surface, this.materials)
         this.vegetation = new Vegetation(scene, this.surface, this.materials, assets, seed)
 

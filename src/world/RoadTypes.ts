@@ -35,6 +35,10 @@ export interface RoadSegment {
 export interface SampleRef {
     segment: RoadSegment
     sample: number
+    /** Copies of the sample position and distance along the track: spatial queries read them without following the segment */
+    x: number
+    z: number
+    distance: number
 }
 
 /** Result of projecting an arbitrary point onto the road centerline */

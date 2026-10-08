@@ -25,6 +25,8 @@ export const pt: LangStrings = {
     action_help: 'dicas',
     action_debug: 'informações técnicas',
     action_pause: 'pausa e menu',
+    action_free_camera: 'câmera livre',
+    free_camera_hint: 'Câmera livre: mouse para olhar, WASD para voar, Espaço / Shift subir e descer, Q mais rápido, roda muda a velocidade, F10 voltar',
     action_hide: 'ocultar',
 
     menu_footer: '↑ ↓ escolher · Enter / A confirmar · Esc / B voltar',
@@ -67,6 +69,7 @@ export const pt: LangStrings = {
     weather_fog: 'Neblina',
     biome_forest: 'Floresta',
     biome_autumn: 'Floresta de outono',
+    biome_sakura: 'Cerejeiras em flor',
     biome_desert: 'Deserto',
 
     gamepad_connected: 'Controle conectado: {name}',

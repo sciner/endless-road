@@ -1,4 +1,4 @@
-import { Color, DoubleSide, IUniform, Material, Mesh, MeshStandardMaterial, Object3D, Texture, Vector2, WebGLProgramParametersWithUniforms } from 'three'
+import { Color, DoubleSide, SRGBColorSpace, IUniform, Material, Mesh, MeshStandardMaterial, Object3D, Texture, Vector2, WebGLProgramParametersWithUniforms } from 'three'
 import { EnvironmentLook } from '../environment/EnvironmentLook'
 import { GroundType } from '../environment/EnvironmentTypes'
 import { AssetLibrary, PbrSet } from './AssetLibrary'
@@ -15,6 +15,8 @@ export class WorldMaterials {
     readonly markings: MeshStandardMaterial
     readonly rail: MeshStandardMaterial
     readonly post: MeshStandardMaterial
+    /** Bridge decks, piers, abutments and curbs */
+    readonly concrete: MeshStandardMaterial
     readonly terrain: MeshStandardMaterial
     readonly bark: MeshStandardMaterial
     readonly fir_foliage: MeshStandardMaterial
@@ -39,8 +41,17 @@ export class WorldMaterials {
     private shoulder_roughness_uniform: IUniform<number> = { value: 0.32 }
     private leaf_recolor_uniform: IUniform<number> = { value: 0 }
     private leaf_recolor_color_uniform: IUniform<Color> = { value: new Color() }
-    private grass_recolor_uniform: IUniform<number> = { value: 0 }
-    private grass_recolor_color_uniform: IUniform<Color> = { value: new Color() }
+    private leaf_recolor_alt_uniform: IUniform<Color> = { value: new Color(0.92, 0.66, 0.16) }
+    private leaf_soft_uniform: IUniform<number> = { value: 0 }
+    /** Grass albedo: the average terrain color under it, so tufts do not stand out as dark spots */
+    private grass_ground_uniform: IUniform<Color> = { value: new Color(0.3, 0.32, 0.22) }
+    private ground_average = new Map<Texture, Color>()
+    /** Leaves and cherry petals painted onto the terrain */
+    private fallen_leaf_maps: [Texture, Texture]
+    private litter_map_uniform: IUniform<Texture>
+    private litter_amount_uniform: IUniform<number> = { value: 0 }
+    private litter_tint_uniform: IUniform<number> = { value: 1 }
+    private litter_colors: IUniform<Color[]> = { value: [new Color(0x7a5a32), new Color(0x8a7a3a), new Color(0x6f7a3a)] }
     private grounds: Record<GroundType, PbrSet>
 
     constructor(assets: AssetLibrary, anisotropy: number) {
@@ -81,7 +92,8 @@ export class WorldMaterials {
         })
 
         this.rail = new MeshStandardMaterial({
-            color: new Color(0x8f979c),
+            map: ProceduralTextures.galvanized(anisotropy),
+            color: new Color(0x9aa2a7),
             metalness: 0.85,
             roughness: 0.32,
             side: DoubleSide,
@@ -93,6 +105,17 @@ export class WorldMaterials {
             roughness: 0.5,
         })
 
+        // Concrete: 4x4 m texture, UVs are given in meters / 4
+        const concrete_maps: { map: Texture, normal: Texture, roughness: Texture } = ProceduralTextures.concrete(anisotropy)
+        this.concrete = new MeshStandardMaterial({
+            map: concrete_maps.map,
+            normalMap: concrete_maps.normal,
+            roughnessMap: concrete_maps.roughness,
+            color: new Color(0xb4b0a8),
+            roughness: 1,
+            metalness: 0,
+        })
+
         // Ground: 5x5 m texture, the map set changes with the terrain
         this.terrain = new MeshStandardMaterial({
             map: assets.grass.map,
@@ -102,11 +125,17 @@ export class WorldMaterials {
             metalness: 0,
             color: new Color(0x9aa08a),
         })
+        this.fallen_leaf_maps = [ProceduralTextures.fallenLeaves(false, anisotropy), ProceduralTextures.fallenLeaves(true, anisotropy)]
+        this.litter_map_uniform = { value: this.fallen_leaf_maps[0] }
         this.terrain.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms): void => {
             ShaderPatches.terrain(shader, {
                 uPuddleMap: puddle_uniform,
                 uDirtColor: this.dirt_uniform,
                 uShoulderRoughness: this.shoulder_roughness_uniform,
+                uLitterMap: this.litter_map_uniform,
+                uLitterColors: this.litter_colors,
+                uLitterAmount: this.litter_amount_uniform,
+                uLitterTint: this.litter_tint_uniform,
             })
         }
         this.terrain.customProgramCacheKey = (): string => 'terrain'
@@ -131,12 +160,12 @@ export class WorldMaterials {
         this.leaf_foliage = this.createFoliage(ProceduralTextures.leafCluster(anisotropy), 0x93a07c, 0.009, 'leaf', this.tree_fade, {
             uRecolor: this.leaf_recolor_uniform,
             uRecolorColor: this.leaf_recolor_color_uniform,
+            uRecolorAlt: this.leaf_recolor_alt_uniform,
+            uRecolorSoft: this.leaf_soft_uniform,
         })
-        this.grass = this.createFoliage(ProceduralTextures.grassBlades(anisotropy), 0x8f9a78, 0.18, 'grass', this.grass_fade, {
-            uRecolor: this.grass_recolor_uniform,
-            uRecolorColor: this.grass_recolor_color_uniform,
-        })
+        this.grass = this.createFoliage(ProceduralTextures.grassBlades(anisotropy), 0xffffff, 0.18, 'grass', this.grass_fade, null, this.grass_ground_uniform)
         this.dry_bush = this.createFoliage(ProceduralTextures.dryBush(anisotropy), 0xa89878, 0.012, 'dry-bush', this.fern_fade, null)
+
 
         const fern_source: MeshStandardMaterial = WorldMaterials.findFirstMaterial(assets)
         this.fern = new MeshStandardMaterial({
@@ -152,6 +181,7 @@ export class WorldMaterials {
         })
         this.fern.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms): void => {
             ShaderPatches.foliage(shader, { uTime: this.time_uniform }, 0.06)
+            ShaderPatches.matte(shader, 0.1)
             ShaderPatches.distanceFade(shader, this.fern_fade)
         }
         this.fern.customProgramCacheKey = (): string => 'fern'
@@ -184,7 +214,7 @@ export class WorldMaterials {
         this.cactus.customProgramCacheKey = (): string => 'cactus'
     }
 
-    private createFoliage(map: Texture, color: number, sway: number, key: string, fade: IUniform<Vector2>, recolor: Record<string, IUniform> | null): MeshStandardMaterial {
+    private createFoliage(map: Texture, color: number, sway: number, key: string, fade: IUniform<Vector2>, recolor: Record<string, IUniform> | null, ground: IUniform<Color> | null = null): MeshStandardMaterial {
         const material: MeshStandardMaterial = new MeshStandardMaterial({
             map: map,
             color: new Color(color),
@@ -196,9 +226,17 @@ export class WorldMaterials {
         })
         material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms): void => {
             ShaderPatches.foliage(shader, { uTime: this.time_uniform }, sway)
+            // Grass lit like the ground keeps the ground's own sheen: otherwise it reads darker than the soil around it
+            if (!ground) ShaderPatches.matte(shader, 0.1)
             if (recolor) ShaderPatches.recolor(shader, recolor)
+            if (ground) ShaderPatches.groundMatch(shader, { uGroundColor: ground, uGroundNoise: { value: this.puddle_map } })
             ShaderPatches.snowCover(shader, { uSnow: this.snow_uniform, uPuddleMap: { value: this.puddle_map } })
             ShaderPatches.distanceFade(shader, fade)
+        }
+        if (ground) {
+            // Terrain roughness 0.9 times its roughness map (~0.68 on average)
+            material.roughness = 0.62
+            material.envMapIntensity = 1
         }
         material.customProgramCacheKey = (): string => `foliage-${key}`
         return material
@@ -243,9 +281,45 @@ export class WorldMaterials {
         this.leaf_foliage.color.copy(look.leaf_tint)
         this.leaf_recolor_uniform.value = look.leaf_recolor
         this.leaf_recolor_color_uniform.value.copy(look.leaf_tint)
-        this.grass.color.copy(look.grass_tint)
-        this.grass_recolor_uniform.value = look.grass_recolor
-        this.grass_recolor_color_uniform.value.copy(look.grass_tint)
+        this.leaf_recolor_alt_uniform.value.copy(look.leaf_tint_alt)
+        this.leaf_soft_uniform.value = look.leaf_soft
+        this.leaf_foliage.emissive.copy(look.leaf_tint).multiplyScalar(look.leaf_glow)
+        for (let i: number = 0; i < 3; i++) this.litter_colors.value[i].copy(look.leaf_palette[i % look.leaf_palette.length])
+        // Fallen leaves are painted onto the terrain itself, so they always lie flush; snow and sand have none
+        this.litter_map_uniform.value = this.fallen_leaf_maps[look.leaf_size < 1 ? 1 : 0]
+        this.litter_amount_uniform.value = look.ground === 'grass' ? look.litter : 0
+        // Wet leaves go darker
+        this.litter_tint_uniform.value = 1 - look.wetness * 0.3
+        // Grass takes the terrain's own color, so tufts never stand out from the ground
+        this.grass_ground_uniform.value.copy(this.averageColor(ground.map)).multiply(look.ground_tint)
+    }
+
+    /** Average linear albedo of a loaded texture, measured once on a small canvas */
+    private averageColor(texture: Texture): Color {
+        const cached: Color | undefined = this.ground_average.get(texture)
+        if (cached) return cached.clone()
+        const color: Color = new Color(0.3, 0.3, 0.25)
+        const image: CanvasImageSource | undefined = texture.image as CanvasImageSource | undefined
+        const canvas: HTMLCanvasElement = document.createElement('canvas')
+        canvas.width = 32
+        canvas.height = 32
+        const ctx: CanvasRenderingContext2D | null = canvas.getContext('2d', { willReadFrequently: true })
+        if (image && ctx) {
+            ctx.drawImage(image, 0, 0, 32, 32)
+            const data: Uint8ClampedArray = ctx.getImageData(0, 0, 32, 32).data
+            const sum: number[] = [0, 0, 0]
+            const pixel: Color = new Color()
+            for (let i: number = 0; i < data.length; i += 4) {
+                pixel.setRGB(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, SRGBColorSpace)
+                sum[0] += pixel.r
+                sum[1] += pixel.g
+                sum[2] += pixel.b
+            }
+            const count: number = data.length / 4
+            color.setRGB(sum[0] / count, sum[1] / count, sum[2] / count)
+        }
+        this.ground_average.set(texture, color)
+        return color.clone()
     }
 
     update(time: number): void {
@@ -254,7 +328,7 @@ export class WorldMaterials {
 
     all(): Material[] {
         return [
-            this.road, this.markings, this.rail, this.post, this.terrain, this.bark, this.fir_foliage,
+            this.road, this.markings, this.rail, this.post, this.concrete, this.terrain, this.bark, this.fir_foliage,
             this.leaf_foliage, this.grass, this.fern, this.rock, this.cactus, this.dry_bush,
         ]
     }

@@ -320,6 +320,68 @@ body {
     letter-spacing: 1px;
 }
 
+.menu-controls-columns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 24px 56px;
+    margin-bottom: 18px;
+
+    .menu-controls {
+        margin-bottom: 0;
+    }
+}
+
+.pad-diagram {
+    display: block;
+    width: min(760px, 86vw);
+    height: auto;
+    overflow: visible;
+}
+
+.pad-body {
+    fill: rgba(255, 255, 255, 0.05);
+    stroke: @text-dim;
+    stroke-width: 1.5;
+}
+
+.pad-part {
+    fill: rgb(14, 18, 25);
+    stroke: @text-dim;
+    stroke-width: 1.2;
+}
+
+.pad-stick-top {
+    fill: rgb(30, 35, 44);
+}
+
+.pad-letter {
+    font-size: 12px;
+    font-weight: 700;
+    text-anchor: middle;
+}
+
+.pad-line {
+    fill: none;
+    stroke: rgba(200, 210, 230, 0.4);
+    stroke-width: 1;
+}
+
+.pad-label {
+    white-space: pre;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+.pad-key {
+    fill: @text-main;
+    font-weight: 600;
+}
+
+.pad-action {
+    fill: @text-dim;
+}
+
 .menu-key {
     color: @text-main;
     font-weight: 600;

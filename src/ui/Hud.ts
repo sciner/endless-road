@@ -73,7 +73,7 @@ export class Hud {
             [['C', lang.action_camera], ['R', lang.action_reset]],
             [['E', lang.action_random_environment]],
             [['M', lang.action_sound], ['F3', lang.action_debug], ['H', lang.action_hide]],
-            [['Esc', lang.action_pause]],
+            [['Esc', lang.action_pause], ['F10', lang.action_free_camera]],
             [[`${lang.gamepad}:`, ''], ['RT', lang.action_throttle], ['LT', lang.action_brake], ['A', lang.action_handbrake]],
         ]
         this.help.innerHTML = lines
@@ -89,11 +89,11 @@ export class Hud {
     }
 
     /** Short notice at the top center that fades out by itself */
-    showToast(text: string): void {
+    showToast(text: string, duration_ms: number = 2600): void {
         this.toast.textContent = text
         this.toast.classList.add('hud-toast-visible')
         window.clearTimeout(this.toast_timer)
-        this.toast_timer = window.setTimeout((): void => this.toast.classList.remove('hud-toast-visible'), 2600)
+        this.toast_timer = window.setTimeout((): void => this.toast.classList.remove('hud-toast-visible'), duration_ms)
     }
 
     setLoading(ratio: number, text: string): void {

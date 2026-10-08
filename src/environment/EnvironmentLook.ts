@@ -37,13 +37,28 @@ export interface EnvironmentLook {
     dirt: Color
     fir_tint: Color
     leaf_tint: Color
+    /** Second foliage hue that some trees lean toward: yellow in autumn, white in cherry blossom */
+    leaf_tint_alt: Color
     /** Luminance-based recolor of foliage toward leaf_tint (autumn), 0..1 */
     leaf_recolor: number
+    /** Evens out dark spots in the recolored crown texture, 0..1 */
+    leaf_soft: number
+    /** Light shining through thin petals, added on top of the lighting */
+    leaf_glow: number
     grass_tint: Color
     grass_recolor: number
 
     precipitation: Precipitation
     precipitation_alpha: number
+
+    /** Fallen leaves lying on the road, 0..1 */
+    litter: number
+    /** Leaves carried through the air by the wind, 0..1 */
+    wind_leaves: number
+    /** Leaf size multiplier: petals are smaller than leaves */
+    leaf_size: number
+    /** Colors of fallen and flying leaves */
+    leaf_palette: Color[]
 
     headlights: number
     grip: number
@@ -179,13 +194,15 @@ interface WeatherPreset {
     rain_sound: number
     wind_sound: number
     wet_tires: number
+    /** Leaves torn off and carried by the wind, 0..1 */
+    wind_leaves: number
 }
 
 const WEATHER_PRESETS: Record<Weather, WeatherPreset> = {
-    clear: { overcast: 0, fog_density: 0, wetness: 0, raining: false, snow: 0, precipitation: 'none', grip: 1.05, spray_amount: 0, rain_sound: 0, wind_sound: 0.25, wet_tires: 0 },
-    rain: { overcast: 1, fog_density: 0.0085, wetness: 1, raining: true, snow: 0, precipitation: 'rain', grip: 0.95, spray_amount: 1, rain_sound: 1, wind_sound: 1, wet_tires: 1 },
-    snow: { overcast: 0.85, fog_density: 0.011, wetness: 0.3, raining: false, snow: 1, precipitation: 'snow', grip: 0.62, spray_amount: 0.8, rain_sound: 0, wind_sound: 0.7, wet_tires: 0.35 },
-    fog: { overcast: 0.75, fog_density: 0.022, wetness: 0.35, raining: false, snow: 0, precipitation: 'none', grip: 1.0, spray_amount: 0.3, rain_sound: 0, wind_sound: 0.15, wet_tires: 0.4 },
+    clear: { overcast: 0, fog_density: 0, wetness: 0, raining: false, snow: 0, precipitation: 'none', grip: 1.05, spray_amount: 0, rain_sound: 0, wind_sound: 0.25, wet_tires: 0, wind_leaves: 0 },
+    rain: { overcast: 1, fog_density: 0.0085, wetness: 1, raining: true, snow: 0, precipitation: 'rain', grip: 0.95, spray_amount: 1, rain_sound: 1, wind_sound: 1, wet_tires: 1, wind_leaves: 1 },
+    snow: { overcast: 0.85, fog_density: 0.011, wetness: 0.3, raining: false, snow: 1, precipitation: 'snow', grip: 0.62, spray_amount: 0.8, rain_sound: 0, wind_sound: 0.7, wet_tires: 0.35, wind_leaves: 0.35 },
+    fog: { overcast: 0.75, fog_density: 0.022, wetness: 0.35, raining: false, snow: 0, precipitation: 'none', grip: 1.0, spray_amount: 0.3, rain_sound: 0, wind_sound: 0.15, wet_tires: 0.4, wind_leaves: 0.45 },
 }
 
 const DESERT_HAZE: Color = new Color(0xc8a882)
@@ -232,12 +249,21 @@ export class EnvironmentLookBuilder {
             dirt: new Color(0.055, 0.048, 0.04),
             fir_tint: new Color(0x8c9a7e),
             leaf_tint: new Color(0x93a07c),
+            leaf_tint_alt: new Color(0.92, 0.66, 0.16),
             leaf_recolor: 0,
+            leaf_soft: 0,
+            leaf_glow: 0,
             grass_tint: new Color(0x8f9a78),
             grass_recolor: 0,
 
             precipitation: weather.precipitation,
             precipitation_alpha: time.precipitation_alpha,
+
+            // Summer forest: a few dry leaves on the road; snow buries them
+            litter: weather.snow > 0 ? 0 : 0.35,
+            wind_leaves: weather.wind_leaves * 0.5,
+            leaf_size: 1,
+            leaf_palette: [new Color(0x6f7a3a), new Color(0x8a7a3a), new Color(0x7a5a32), new Color(0x5e6a34)],
 
             headlights: settings.weather === 'fog' ? Math.max(time.headlights, 0.8) : time.headlights,
             grip: weather.grip,
@@ -265,9 +291,34 @@ export class EnvironmentLookBuilder {
             look.leaf_recolor = 1
             look.grass_tint.set(0xa89058)
             look.grass_recolor = 0.65
+            look.litter = look.snow > 0 ? 0.15 : 1
+            look.wind_leaves *= 2
+            look.leaf_palette = [new Color(0xd2642a), new Color(0xe0a030), new Color(0xb8401e), new Color(0x8a5428), new Color(0xd88a2a)]
+            return
+        }
+        if (biome === 'sakura') {
+            // Blossoming cherries: pink crowns with white-flowered trees here and there, fresh spring grass
+            // Brighter than 1: the recolor takes brightness from the dark green leaf texture
+            look.leaf_tint.set(0xffa8bc).multiplyScalar(1.15)
+            look.leaf_tint_alt.set(0xfff0f2)
+            look.leaf_recolor = 1
+            // Blossom is light and translucent: no dark holes in the crowns, a soft glow in daylight
+            look.leaf_soft = 0.6
+            look.leaf_glow = 0.07 * Math.min(1, look.hemi_intensity)
+            look.grass_tint.set(0x8fa86e)
+            look.ground_tint.set(0x9ea88a)
+            // Petals lie on the road and drift down even in calm weather
+            look.litter = look.snow > 0 ? 0.2 : 1
+            look.wind_leaves = Math.max(0.35, look.wind_leaves * 2)
+            look.leaf_size = 0.75
+            look.leaf_palette = [new Color(0xf6b8d0), new Color(0xfad4e2), new Color(0xee9cbc), new Color(0xfff0f4)]
             return
         }
         if (biome !== 'desert') return
+
+        // No leaves in the desert
+        look.litter = 0
+        look.wind_leaves = 0
 
         look.ground = look.snow > 0 ? 'snow' : 'sand'
         look.ground_tint.set(0xd8c8b4)

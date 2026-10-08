@@ -3,6 +3,7 @@ import {
     WebGLRenderTarget,
 } from 'three'
 import { Input, DriveInput } from './core/Input'
+import { SessionData, SessionState } from './core/SessionState'
 import { Settings } from './core/Settings'
 import { EnvironmentSystem } from './environment/EnvironmentSystem'
 import {
@@ -11,6 +12,7 @@ import {
 import { Lang, lang, LANGUAGE_NAMES, LanguageCode, LANGUAGES } from './i18n/Lang'
 import { AssetLibrary } from './render/AssetLibrary'
 import { CameraRig } from './render/CameraRig'
+import { FreeCamera } from './render/FreeCamera'
 import { Lighting } from './render/Lighting'
 import { PostProcessing } from './render/PostProcessing'
 import { Precipitation } from './render/Precipitation'
@@ -25,11 +27,18 @@ import { Car } from './vehicle/Car'
 import { CarGarage } from './vehicle/CarGarage'
 import { CAR_IDS, CAR_PROFILES, CarId, CarProfile } from './vehicle/CarProfiles'
 import { CarWheel } from './vehicle/CarModel'
+import { LeafLitter } from './world/LeafLitter'
 import { World } from './world/World'
-import { WORLD_SEED } from './world/WorldConfig'
+import { RAIL_OFFSET, ROAD_GENERATE_AHEAD, WORLD_SEED } from './world/WorldConfig'
+import { RoadNetwork } from './world/RoadNetwork'
+import { RoadProjection } from './world/RoadTypes'
 
 const PHYSICS_STEP: number = 1 / 120
 const MAX_SUBSTEPS: number = 8
+/** How often the position is saved while the game runs, s: a crash or a killed tab loses at most this much */
+const SESSION_SAVE_INTERVAL: number = 5
+/** Road regrowth from a save runs in slices this long between yields to the browser, ms */
+const REGROW_SLICE_MS: number = 50
 
 function qualityName(choice: QualityChoice): string {
     const names: Record<QualityChoice, string> = {
@@ -38,8 +47,11 @@ function qualityName(choice: QualityChoice): string {
     return names[choice]
 }
 
-/** menu is the title menu before the start, paused is the menu over a drive in progress */
-type GameState = 'menu' | 'playing' | 'paused'
+/**
+ * menu is the title menu before the start, paused is the menu over a drive in progress,
+ * free is the F10 pause with a free-flying camera: the whole world stays frozen as it was
+ */
+type GameState = 'menu' | 'playing' | 'paused' | 'free'
 
 /**
  * The whole game: renderer, scene, world, car, effects and the game loop
@@ -52,17 +64,27 @@ export class Game {
     private particles: Scene = new Scene()
     private input: Input = new Input()
     private settings: Settings = new Settings()
+    /** The last drive: the world is rebuilt from its seed and the car returns to where it was */
+    private session: SessionData | null = SessionState.load()
+    private seed: number = this.session ? this.session.seed : WORLD_SEED
+    /** Set once the world and the car are in place, before that there is nothing to save */
+    private ready: boolean = false
+    private last_save: number = 0
     private hud: Hud
     private debug: DebugOverlay
     private menu: MainMenu
     private state: GameState = 'menu'
     private audio: AudioSystem = new AudioSystem()
     private camera_rig: CameraRig
+    private free_camera: FreeCamera
+    /** Where F10 returns to from the free camera */
+    private free_return: GameState = 'playing'
     private post!: PostProcessing
     private world!: World
     private car!: Car
     private precipitation: Precipitation = new Precipitation()
     private spray: TireSpray = new TireSpray()
+    private leaves: LeafLitter = new LeafLitter()
     private sky!: SkyDome
     private lighting!: Lighting
     private environment!: EnvironmentSystem
@@ -101,6 +123,7 @@ export class Game {
         this.hud = new Hud(root)
         this.debug = new DebugOverlay(root, this.renderer)
         this.camera_rig = new CameraRig(window.innerWidth / window.innerHeight)
+        this.free_camera = new FreeCamera(this.camera_rig.camera)
         this.garage = new CarGarage(this.renderer, this.scene, this.camera_rig.camera, {
             current: (): Car => this.car,
             headlight_shadows: (): boolean => this.quality.headlight_shadows,
@@ -118,8 +141,17 @@ export class Game {
             on_randomize: (): void => this.randomizeEnvironment(),
         })
         window.addEventListener('resize', (): void => this.resize())
+        // The browser releases the mouse on Esc; a click takes it back
+        this.renderer.domElement.addEventListener('click', (): void => {
+            if (this.state === 'free') this.lockPointer()
+        })
         window.addEventListener('blur', (): void => {
             if (this.state === 'playing') this.pause()
+        })
+        // pagehide covers closing and reloading; a hidden tab may be killed later without any event
+        window.addEventListener('pagehide', (): void => this.saveSession())
+        document.addEventListener('visibilitychange', (): void => {
+            if (document.visibilityState === 'hidden') this.saveSession()
         })
         this.input.onAnyKey((): void => {
             if (!this.audio.started) this.audio.start()
@@ -320,8 +352,44 @@ export class Game {
 
     private pause(): void {
         this.state = 'paused'
+        this.saveSession()
         this.hud.setVisible(false)
         this.menu.show(true)
+    }
+
+    /** F10: the game stops without the menu and the camera is free to fly anywhere */
+    private enterFreeCamera(): void {
+        this.free_return = this.state
+        this.state = 'free'
+        this.saveSession()
+        this.menu.hide()
+        this.hud.setVisible(false)
+        // Movement gathered before the switch must not jerk the camera
+        this.input.takeMouse()
+        this.input.takeWheel()
+        this.free_camera.enter()
+        this.lockPointer()
+        this.hud.showToast(lang.free_camera_hint, 6000)
+    }
+
+    /** F10 again: back to the car exactly where the camera rig left it */
+    private exitFreeCamera(): void {
+        if (document.pointerLockElement) document.exitPointerLock()
+        if (this.free_return === 'playing') {
+            this.state = 'playing'
+            this.hud.setVisible(true)
+        } else {
+            this.state = this.free_return
+            this.menu.show(this.free_return === 'paused')
+        }
+    }
+
+    private lockPointer(): void {
+        const canvas: HTMLCanvasElement = this.renderer.domElement
+        if (document.pointerLockElement === canvas) return
+        // Newer browsers return a promise that rejects without a user gesture; a click then locks it
+        const result: unknown = canvas.requestPointerLock()
+        if (result instanceof Promise) result.catch((): void => undefined)
     }
 
     private toggleMute(): void {
@@ -348,13 +416,14 @@ export class Game {
         await assets.load(profile.look.model_path)
 
         this.setupScene(assets)
-        this.world = new World(this.scene, assets, anisotropy, WORLD_SEED)
+        this.world = new World(this.scene, assets, anisotropy, this.seed)
         this.car = new Car(assets.car, profile)
         this.garage.add(this.car)
         this.camera_rig.setCockpit(profile.look.cockpit)
         this.scene.add(this.car.model.root)
         this.particles.add(this.precipitation.mesh)
         this.particles.add(this.spray.points)
+        this.scene.add(this.leaves.mesh)
         // The environment is applied before world generation so vegetation grows for the chosen terrain right away
         this.environment = new EnvironmentSystem(this.root, {
             renderer: this.renderer,
@@ -365,17 +434,20 @@ export class Game {
             vegetation: this.world.vegetation,
             precipitation: this.precipitation,
             spray: this.spray,
+            leaves: this.leaves,
             audio: this.audio,
             car: this.car,
             post: (): PostProcessing | null => this.post ?? null,
             center: (): Vector3 => this.car.position,
         }, this.settings.environment)
 
-        const start: Vector3 = new Vector3(0, 0, 0)
+        const session: SessionData | null = this.session
+        const start: Vector3 = session ? new Vector3(session.x, 0, session.z) : new Vector3(0, 0, 0)
+        if (session) await this.regrowRoad(session)
         await this.world.preload(start, (ratio: number): void => {
             this.hud.setLoading(0.6 + ratio * 0.35, lang.loading_world)
         })
-        this.car.placeOnRoad(this.world.surface, 0, 0)
+        if (!session || !this.restorePosition(session)) this.car.placeOnRoad(this.world.surface, 0, 0)
         this.last_position.copy(this.car.position)
         this.camera_rig.showcase(0, this.car.physics, this.world.surface)
 
@@ -395,9 +467,77 @@ export class Game {
         this.menu.show(false)
 
         this.last_frame = performance.now()
+        this.ready = true
+        this.saveSession()
         this.renderer.setAnimationLoop((): void => this.frame())
         // The other cars are built while the player looks at the menu, so the first swap is already instant
         void this.garage.preloadAll()
+    }
+
+    /**
+     * The road grows from the start in both directions, and each new piece avoids the ones already built,
+     * so it is regrown in the usual order (start, then forward, then back) up to the lengths it had
+     */
+    private async regrowRoad(session: SessionData): Promise<void> {
+        const road: RoadNetwork = this.world.road
+        const wait: () => Promise<void> = (): Promise<void> => new Promise((resolve: () => void): void => {
+            setTimeout(resolve, 0)
+        })
+        this.hud.setLoading(0.6, lang.loading_world)
+        road.ensureAround(0, ROAD_GENERATE_AHEAD, 10000)
+        // A point just short of the far end makes ensureAround extend only that end, one control point per call.
+        // The browser delays each setTimeout by at least 4 ms (a second in a background tab), so it yields
+        // only once per time slice: yielding per point made tens of kilometers take many seconds
+        let slice_end: number = performance.now() + REGROW_SLICE_MS
+        while (road.front_distance < session.road_front) {
+            road.ensureAround(road.front_distance - ROAD_GENERATE_AHEAD + 1, ROAD_GENERATE_AHEAD, 1)
+            if (performance.now() > slice_end) {
+                await wait()
+                slice_end = performance.now() + REGROW_SLICE_MS
+            }
+        }
+        while (road.back_distance > session.road_back) {
+            road.ensureAround(road.back_distance + ROAD_GENERATE_AHEAD - 1, ROAD_GENERATE_AHEAD, 1)
+            if (performance.now() > slice_end) {
+                await wait()
+                slice_end = performance.now() + REGROW_SLICE_MS
+            }
+        }
+    }
+
+    /**
+     * Puts the car back where it was. If the road came out a little different (the generator changed),
+     * the car is set on the nearest road instead; false when there is no road nearby at all
+     */
+    private restorePosition(session: SessionData): boolean {
+        const projection: RoadProjection | null = this.world.road.project(session.x, session.z, 400)
+        if (!projection) return false
+        if (Math.abs(projection.lateral) <= RAIL_OFFSET + 2) {
+            const position: Vector3 = new Vector3(session.x, this.world.surface.drive(session.x, session.z).height, session.z)
+            this.car.physics.place(position, session.yaw)
+            this.car.render(0, 1)
+        } else {
+            this.car.placeOnRoad(this.world.surface, session.x, session.z)
+        }
+        this.car.physics.along = projection.along
+        this.odometer = session.odometer
+        return true
+    }
+
+    private saveSession(): void {
+        if (!this.ready) return
+        this.last_save = this.time
+        const position: Vector3 = this.car.position
+        SessionState.save({
+            seed: this.seed,
+            x: position.x,
+            z: position.z,
+            yaw: this.car.physics.yaw,
+            along: this.car.physics.along,
+            road_front: this.world.road.front_distance,
+            road_back: this.world.road.back_distance,
+            odometer: this.odometer,
+        })
     }
 
     /** Sky, lights and HDRI environment; EnvironmentSystem sets their colors and intensity */
@@ -429,10 +569,11 @@ export class Game {
         const now: number = performance.now()
         const dt: number = Math.min((now - this.last_frame) / 1000, 0.1)
         this.last_frame = now
-        this.time += dt
-
         this.input.poll()
         this.handleKeys()
+        // In the free camera time stops for the whole world: wind, rain, leaves and streaming stay as they were
+        const free: boolean = this.state === 'free'
+        if (!free) this.time += dt
         const playing: boolean = this.state === 'playing'
         const drive: DriveInput = this.input.drive()
 
@@ -459,12 +600,15 @@ export class Game {
         this.odometer += Math.hypot(position.x - this.last_position.x, position.z - this.last_position.z)
         this.last_position.copy(position)
 
-        this.world.update(position, this.car.physics.along, this.time)
-        if (playing) this.camera_rig.update(dt, this.car.physics, this.world.surface)
+        if (!free) this.world.update(position, this.car.physics.along, this.time)
+        if (free) this.free_camera.update(dt, this.input)
+        else if (playing) this.camera_rig.update(dt, this.car.physics, this.world.surface)
         else this.camera_rig.showcase(dt, this.car.physics, this.world.surface)
         this.lighting.follow(position, this.car.physics.yaw)
         this.sky.update(this.camera_rig.camera.position, this.time)
-        this.updateEffects(dt, playing)
+        if (!free) this.updateEffects(dt, playing)
+
+        if (playing && this.time - this.last_save > SESSION_SAVE_INTERVAL) this.saveSession()
 
         this.hud.update(this.car.physics.speed, this.car.physics.gear, this.car.physics.rpm, this.odometer)
         // In the menu the engine idles and the tires are silent
@@ -476,7 +620,7 @@ export class Game {
         this.debug.update(dt, (): DebugSnapshot => ({
             car: this.car.physics,
             world: this.world.stats(),
-            seed: WORLD_SEED,
+            seed: this.seed,
             camera_mode: this.camera_rig.mode_index,
             physics_steps: steps,
             pixel_ratio: this.pixel_ratio,
@@ -488,6 +632,13 @@ export class Game {
 
     private handleKeys(): void {
         if (this.input.wasPressed('F3')) this.toggleDebug()
+        if (this.input.wasPressed('F10')) {
+            if (this.state === 'free') this.exitFreeCamera()
+            else this.enterFreeCamera()
+            return
+        }
+        // In the free camera the keys only fly it
+        if (this.state === 'free') return
 
         // While the menu is open, input belongs to it
         if (this.menu.is_open) {
@@ -520,6 +671,7 @@ export class Game {
         const head: Vector3 = root.clone().addScaledVector(forward, 2).setY(root.y + 0.7)
         // While paused the car is frozen but keeps its velocity: without zeroing it snowflakes would stretch into dashes
         const relative: Vector3 = playing ? this.car.physics.velocity : new Vector3()
+        this.precipitation.setPixelScale(this.camera_rig.camera.fov, window.innerHeight * this.pixel_ratio)
         this.precipitation.update(this.time, this.camera_rig.camera.position, relative, head, forward)
 
         // Spray is emitted at the contact patches of the rear wheels
@@ -538,6 +690,9 @@ export class Game {
         // While paused the car is frozen, so no new spray is born and the old one settles
         const speed: number = playing ? this.car.physics.speed : 0
         const slip: number = playing ? this.car.physics.slip : 0
-        this.spray.update(dt, emitters, this.car.physics.velocity, speed, this.car.physics.on_road, slip, tail)
+        const back: Vector3 = forward.clone().negate()
+        this.spray.update(dt, emitters, this.car.physics.velocity, speed, this.car.physics.on_road, slip, tail, back, this.car.model.tail_glow)
+        // Fallen leaves fly up from under the car; in bad weather the wind carries more of them
+        this.leaves.update(dt, this.world.surface, this.car.position, yaw, this.car.physics.velocity, speed, this.camera_rig.camera.position)
     }
 }

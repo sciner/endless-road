@@ -16,10 +16,11 @@ export class CarContactShadow {
     private material: MeshBasicMaterial
     private opacity: number = GROUND_OPACITY
 
-    constructor(width: number, length: number) {
+    /** wheels are the tire contact points in car space, [x, z]: spots go exactly under them */
+    constructor(width: number, length: number, wheels: number[][]) {
         this.material = new MeshBasicMaterial({
             color: 0x000000,
-            map: CarContactShadow.createTexture(width, length),
+            map: CarContactShadow.createTexture(width, length, wheels),
             transparent: true,
             opacity: GROUND_OPACITY,
             depthWrite: false,
@@ -32,7 +33,8 @@ export class CarContactShadow {
         geometry.rotateX(-Math.PI / 2)
         this.mesh = new Mesh(geometry, this.material)
         this.mesh.name = 'car-contact-shadow'
-        this.mesh.position.y = 0.02
+        // Just above the asphalt: higher up, the plane covers the bottom of the tires and they look sunk into the road
+        this.mesh.position.y = 0.004
         this.mesh.renderOrder = 1
         this.mesh.castShadow = false
         this.mesh.receiveShadow = false
@@ -48,7 +50,7 @@ export class CarContactShadow {
      * Soft rounded rectangle built from a distance field:
      * densest under the center and wheels, smoothly fading toward the edges
      */
-    private static createTexture(width: number, length: number): CanvasTexture {
+    private static createTexture(width: number, length: number, wheels: number[][]): CanvasTexture {
         const canvas: HTMLCanvasElement = document.createElement('canvas')
         canvas.width = TEXTURE_WIDTH
         canvas.height = TEXTURE_HEIGHT
@@ -62,8 +64,8 @@ export class CarContactShadow {
         const box_half_z: number = length * 0.44
         const corner: number = width * 0.3
         const softness: number = width * 0.28
-        const wheel_x: number = width * 0.4
-        const wheel_z: number = length * 0.31
+        // Wheels are often not symmetric about the body center (a rear-engined car has its axles shifted forward)
+        const spots: number[][] = wheels.length > 0 ? wheels : [[-1, -1], [-1, 1], [1, -1], [1, 1]].map((sign: number[]): number[] => [sign[0] * width * 0.4, sign[1] * length * 0.31])
 
         for (let py: number = 0; py < TEXTURE_HEIGHT; py++) {
             for (let px: number = 0; px < TEXTURE_WIDTH; px++) {
@@ -77,9 +79,11 @@ export class CarContactShadow {
                 let alpha: number = 1 - MathUtils.smoothstep(-softness, softness, distance)
                 alpha = alpha * alpha * 0.75
                 // Spots under the wheels, where the floor is closest to the ground
-                const wx: number = Math.abs(x) - wheel_x
-                const wz: number = Math.abs(z) - wheel_z
-                const wheel: number = 1 - MathUtils.smoothstep(0, width * 0.32, Math.hypot(wx, wz * 0.7))
+                let wheel: number = 0
+                for (let w: number = 0; w < spots.length; w++) {
+                    const d: number = Math.hypot(x - spots[w][0], (z - spots[w][1]) * 0.7)
+                    wheel = Math.max(wheel, 1 - MathUtils.smoothstep(0, width * 0.32, d))
+                }
                 alpha = Math.min(1, alpha + wheel * 0.45)
 
                 const index: number = (py * TEXTURE_WIDTH + px) * 4

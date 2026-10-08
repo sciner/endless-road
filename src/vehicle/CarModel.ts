@@ -132,7 +132,9 @@ export class CarModel {
         const box: Box3 = new Box3()
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
-            if (mesh.isMesh && materials.indexOf(CarModel.materialName(mesh)) >= 0) box.expandByObject(mesh)
+            // Precise: a box around the rotated bounding box of a tilted tire reaches ~12 cm below its real bottom,
+            // and the car stood that high above the road
+            if (mesh.isMesh && materials.indexOf(CarModel.materialName(mesh)) >= 0) box.expandByObject(mesh, true)
         })
         return box
     }
@@ -141,7 +143,7 @@ export class CarModel {
         const boxes: Box3[] = []
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
-            if (mesh.isMesh && CarModel.materialName(mesh) === this.look.tire_material) boxes.push(new Box3().setFromObject(mesh))
+            if (mesh.isMesh && CarModel.materialName(mesh) === this.look.tire_material) boxes.push(new Box3().setFromObject(mesh, true))
         })
         return boxes
     }
@@ -193,7 +195,7 @@ export class CarModel {
         model.traverse((object: Object3D): void => {
             const mesh: Mesh = object as Mesh
             if (!mesh.isMesh || this.look.wheel_materials.indexOf(CarModel.materialName(mesh)) < 0) return
-            const box: Box3 = new Box3().setFromObject(mesh).applyMatrix4(inverse_root)
+            const box: Box3 = new Box3().setFromObject(mesh, true).applyMatrix4(inverse_root)
             const center: Vector3 = box.getCenter(new Vector3())
             const is_tire: boolean = CarModel.materialName(mesh) === this.look.tire_material
             let cluster: Cluster | undefined = clusters.find((c: Cluster): boolean => c.center.distanceTo(center) < 0.45)
@@ -326,6 +328,11 @@ export class CarModel {
             this.root.add(tail)
             this.tail_lights.push(tail)
         }
+    }
+
+    /** How strongly the tail lights light up the spray behind the car, 0..1: dim at night, full when braking */
+    get tail_glow(): number {
+        return Math.min(1, (2.5 * this.light_level + this.brake_uniform.value * 5) / 7.5)
     }
 
     /** Brake light brightness: 0 is tail lights, 1 is braking */

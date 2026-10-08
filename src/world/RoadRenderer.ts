@@ -3,6 +3,7 @@ import { WorldMaterials } from '../render/WorldMaterials'
 import { RoadMeshBuilder } from './RoadMeshBuilder'
 import { RoadNetwork } from './RoadNetwork'
 import { RoadSegment } from './RoadTypes'
+import { WorldSurface } from './WorldSurface'
 import { ROAD_VISIBLE_RADIUS } from './WorldConfig'
 
 /**
@@ -14,9 +15,9 @@ export class RoadRenderer {
     private root: Group = new Group()
     private meshes: Map<number, Group> = new Map()
 
-    constructor(scene: Scene, network: RoadNetwork, materials: WorldMaterials) {
-        this.network = network
-        this.builder = new RoadMeshBuilder(network, materials)
+    constructor(scene: Scene, surface: WorldSurface, materials: WorldMaterials) {
+        this.network = surface.road
+        this.builder = new RoadMeshBuilder(surface, materials)
         this.root.name = 'road'
         scene.add(this.root)
     }

@@ -9,6 +9,8 @@ attribute float alpha;
 attribute float size;
 uniform float uScale;
 uniform vec3 uTailPosition;
+uniform vec3 uTailDirection;
+uniform float uTailGlow;
 varying float vAlpha;
 varying float vTail;
 void main() {
@@ -16,7 +18,11 @@ void main() {
     gl_Position = projectionMatrix * view;
     gl_PointSize = size * uScale / max(-view.z, 0.1);
     vAlpha = alpha;
-    vTail = exp(-length(position - uTailPosition) * 0.55);
+    vec3 to_tail = position - uTailPosition;
+    float tail_dist = length(to_tail);
+    // Tail lamps shine backward: spray beside the wheels, under or above the car stays unlit
+    float facing = smoothstep(0.0, 0.6, dot(to_tail / max(tail_dist, 1e-3), uTailDirection));
+    vTail = exp(-tail_dist * 0.7) * facing * uTailGlow;
 }
 `
 
@@ -35,7 +41,7 @@ void main() {
 
 /**
  * Spray from the rear wheels: water mist on wet asphalt, snow or sand;
- * tinted red near the tail lights
+ * tinted red behind the tail lights while they are lit
  */
 export class TireSpray {
     readonly points: Points
@@ -72,6 +78,8 @@ export class TireSpray {
             uColor: { value: new Color(0x2a3442) },
             uTailColor: { value: new Color(0x5a0804) },
             uTailPosition: { value: new Vector3() },
+            uTailDirection: { value: new Vector3(0, 0, -1) },
+            uTailGlow: { value: 0 },
         }
         const material: ShaderMaterial = new ShaderMaterial({
             vertexShader: VERTEX,
@@ -101,7 +109,7 @@ export class TireSpray {
      * Emitters are the rear wheel contact points. Intensity depends on speed
      * and asphalt wetness; drifting produces more spray.
      */
-    update(dt: number, emitters: Vector3[], car_velocity: Vector3, speed: number, on_road: boolean, slip: number, tail_position: Vector3): void {
+    update(dt: number, emitters: Vector3[], car_velocity: Vector3, speed: number, on_road: boolean, slip: number, tail_position: Vector3, tail_direction: Vector3, tail_glow: number): void {
         const emitting: boolean = (on_road || this.off_road) && speed > 3
         const rate: number = emitting ? (speed * 7 + slip * 260) * this.amount : 0
         this.emit_accumulator += rate * dt
@@ -131,6 +139,9 @@ export class TireSpray {
         }
         const tail_uniform: Vector3 = this.uniforms.uTailPosition.value as Vector3
         tail_uniform.copy(tail_position)
+        const tail_direction_uniform: Vector3 = this.uniforms.uTailDirection.value as Vector3
+        tail_direction_uniform.copy(tail_direction)
+        this.uniforms.uTailGlow.value = tail_glow
         this.geometry.attributes.position.needsUpdate = true
         this.geometry.attributes.alpha.needsUpdate = true
         this.geometry.attributes.size.needsUpdate = true

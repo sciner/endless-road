@@ -22,13 +22,15 @@ uniform float uWidth;
 uniform float uStreak;
 uniform float uBaseAlpha;
 uniform float uHeadlights;
+uniform float uPixel;
 varying float vAlpha;
 varying vec2 vCorner;
 
 void main() {
     float fall = uFall * (0.8 + seed * 0.4);
     vec3 velocity = vec3(uWind.x, -fall, uWind.z);
-    vec3 world = offset + velocity * uTime;
+    // offset is a point in the unit cube, so the same particles fill a box of any size evenly
+    vec3 world = offset * uBox + velocity * uTime;
     // Snowflakes swirl: each has its own sway phase
     float phase = uTime * (0.7 + seed * 0.8) + seed * 40.0;
     world.x += sin(phase) * uSwirl;
@@ -38,6 +40,9 @@ void main() {
 
     // The streak stretches along the particle velocity relative to the camera — a shutter exposure effect
     vec3 streak = (velocity - uRelative) * uStreak;
+    // At high speed drops overhead would stretch into meters-long hairlines that break up into dotted rows
+    float streak_len = length(streak);
+    if (streak_len > 1.0) streak /= streak_len;
     vec3 head = world + streak * 0.5;
     vec3 tail = world - streak * 0.5;
     vec4 view_head = viewMatrix * vec4(head, 1.0);
@@ -45,22 +50,36 @@ void main() {
     vec2 axis = view_tail.xy - view_head.xy;
     float axis_len = length(axis);
     vec2 dir = axis_len > 1e-5 ? axis / axis_len : vec2(0.0, 1.0);
+    vec4 view = mix(view_head, view_tail, corner.y);
+    // A raindrop a few millimeters thick is thinner than a pixel a few meters away and MSAA averages it out.
+    // The quad is widened to ~a pixel at each end's own depth: a streak running toward the camera
+    // would otherwise taper below a pixel at its far end and break up into dots.
+    // Brightness drops only partly with the widening to keep distant rain visible
+    float width = max(uWidth, max(-view.z, 0.1) * uPixel * 1.5);
+    float coverage = sqrt(uWidth / width);
     // A short streak must not be shorter than its width, otherwise a snowflake turns into a dash.
     // Side vector to the right of the direction: quad vertices are always counter-clockwise, so the face is front-facing
-    vec2 side = vec2(dir.y, -dir.x) * uWidth;
-    vec4 view = mix(view_head, view_tail, corner.y);
-    view.xy += side * corner.x + dir * uWidth * (corner.y * 2.0 - 1.0);
+    vec2 side = vec2(dir.y, -dir.x) * width;
+    view.xy += side * corner.x + dir * width * (corner.y * 2.0 - 1.0);
     gl_Position = projectionMatrix * view;
 
     // Headlight cone lighting and distance fade
     vec3 to_particle = world - uHeadPosition;
     float dist = length(to_particle);
+    vec3 to_particle_dir = to_particle / max(dist, 1e-3);
+    // Low beams are wide but have a sharp upper cut-off: drops above the beam (over the car, high in the air)
+    // stay dark, otherwise from the chase camera they light up right above the car's tail
+    float cutoff = 1.0 - smoothstep(0.0, 0.06, to_particle_dir.y);
     // Right at the headlights there are few particles, but they overlap into a blinding blob, so lighting ramps up from a couple of meters
-    float cone = smoothstep(0.82, 0.96, dot(to_particle / max(dist, 1e-3), uHeadDirection))
+    float cone = smoothstep(0.82, 0.96, dot(to_particle_dir, uHeadDirection)) * cutoff
         * exp(-dist * 0.045) * smoothstep(1.5, 5.0, dist) * uHeadlights;
     float camera_dist = length(world - uCamera);
-    float fade = smoothstep(0.6, 2.5, camera_dist) * exp(-camera_dist * 0.035);
-    vAlpha = (uBaseAlpha + cone * 0.6) * fade;
+    // Drops high overhead are seen against the sky at the frame edge and turn into stray dots
+    float above = world.y - uCamera.y;
+    // Far unlit drops are thinner than a pixel and show through the foliage as dotted rows; real rain at night fades out sooner
+    float fade = smoothstep(0.6, 2.5, camera_dist) * exp(-camera_dist * 0.035) * (1.0 - smoothstep(4.0, 11.0, above))
+        * (1.0 - smoothstep(14.0, 24.0, camera_dist) * (1.0 - min(cone * 4.0, 1.0)));
+    vAlpha = (uBaseAlpha + cone * 0.6) * fade * coverage;
     vCorner = corner;
 }
 `
@@ -81,6 +100,8 @@ void main() {
 `
 
 interface PrecipitationStyle {
+    /** Size of the box around the camera the particles wrap in: a smaller box means denser precipitation */
+    box: Vector3
     fall: number
     swirl: number
     width: number
@@ -90,8 +111,9 @@ interface PrecipitationStyle {
 }
 
 const STYLES: Record<Exclude<PrecipitationType, 'none'>, PrecipitationStyle> = {
-    rain: { fall: 10.5, swirl: 0, width: 0.0065, streak: 0.028, base_alpha: 0.07, additive: true },
-    snow: { fall: 1.3, swirl: 0.45, width: 0.05, streak: 0.012, base_alpha: 0.5, additive: false },
+    // Rain is seen up close and fades out within ~30 m, so its box is small and dense
+    rain: { box: new Vector3(44, 26, 44), fall: 10.5, swirl: 0, width: 0.0065, streak: 0.05, base_alpha: 0.2, additive: true },
+    snow: { box: BOX, fall: 1.3, swirl: 0.45, width: 0.05, streak: 0.012, base_alpha: 0.5, additive: false },
 }
 
 /**
@@ -110,9 +132,9 @@ export class Precipitation {
         const seeds: number[] = []
         const indices: number[] = []
         for (let i: number = 0; i < PARTICLES; i++) {
-            const x: number = random.next() * BOX.x
-            const y: number = random.next() * BOX.y
-            const z: number = random.next() * BOX.z
+            const x: number = random.next()
+            const y: number = random.next()
+            const z: number = random.next()
             const s: number = random.next()
             const quad: number[][] = [[-1, 0], [1, 0], [1, 1], [-1, 1]]
             for (let k: number = 0; k < 4; k++) {
@@ -146,6 +168,7 @@ export class Precipitation {
             uBaseAlpha: { value: 0.07 },
             uRound: { value: 0 },
             uHeadlights: { value: 1 },
+            uPixel: { value: 0.001 },
         }
         this.material = new ShaderMaterial({
             vertexShader: VERTEX,
@@ -170,6 +193,8 @@ export class Precipitation {
         if (type === 'none') return
         this.uniforms.uHeadlights.value = headlights
         const style: PrecipitationStyle = STYLES[type]
+        const box: Vector3 = this.uniforms.uBox.value as Vector3
+        box.copy(style.box)
         this.uniforms.uFall.value = style.fall
         this.uniforms.uSwirl.value = style.swirl
         this.uniforms.uWidth.value = style.width
@@ -182,6 +207,11 @@ export class Precipitation {
         this.material.blending = style.additive ? AdditiveBlending : NormalBlending
         this.material.premultipliedAlpha = !style.additive
         this.material.needsUpdate = true
+    }
+
+    /** Size of one screen pixel at 1 m from the camera; changes with the speed-dependent FOV */
+    setPixelScale(fov_degrees: number, viewport_height: number): void {
+        this.uniforms.uPixel.value = 2 * Math.tan(fov_degrees * Math.PI / 360) / Math.max(viewport_height, 1)
     }
 
     update(time: number, camera: Vector3, relative_velocity: Vector3, head_position: Vector3, head_direction: Vector3): void {

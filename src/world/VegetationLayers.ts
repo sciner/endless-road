@@ -25,6 +25,8 @@ export interface VegetationEnvironment {
 export interface VegetationLayer {
     name: string
     variants: VegetationVariant[]
+    /** Lighter models that only cast the shadows, same order as variants; null — the variants themselves */
+    shadow_variants: VegetationVariant[] | null
     /** View distance in chunks */
     ring: number
     /** Dissolve uniform of the layer material */
@@ -39,6 +41,8 @@ export interface VegetationLayer {
     /** Random instance tilt, rad */
     tilt: number
     cast_shadow: boolean
+    /** Lay the instance along the terrain slope instead of standing upright */
+    align: boolean
     active: (environment: VegetationEnvironment) => boolean
     density: (x: number, z: number) => number
     pick: (x: number, z: number, random: Random) => number
@@ -48,7 +52,8 @@ export interface VegetationLayer {
 }
 
 /** Common layer defaults that each description overrides */
-const LAYER_DEFAULTS: Pick<VegetationLayer, 'min_road_jitter' | 'max_road' | 'scale_min' | 'scale_max' | 'sink' | 'tilt' | 'cast_shadow'> = {
+const LAYER_DEFAULTS: Pick<VegetationLayer, 'shadow_variants' | 'min_road_jitter' | 'max_road' | 'scale_min' | 'scale_max' | 'sink' | 'tilt' | 'cast_shadow' | 'align'> = {
+    shadow_variants: null,
     min_road_jitter: 2,
     max_road: Infinity,
     scale_min: 0.8,
@@ -56,13 +61,14 @@ const LAYER_DEFAULTS: Pick<VegetationLayer, 'min_road_jitter' | 'max_road' | 'sc
     sink: 0.05,
     tilt: 0.04,
     cast_shadow: false,
+    align: false,
 }
 
 type LayerDescription = Omit<VegetationLayer, 'meshes' | 'shadow_meshes'>
 
 /**
  * Catalog of vegetation and roadside object layers for all terrain types:
- * forest and autumn forest, desert with cacti, dry trees and bushes, boulders everywhere
+ * forest, autumn forest and cherry blossom, desert with cacti, dry trees and bushes, boulders everywhere
  */
 export class VegetationLayers {
     private seed: number
@@ -92,20 +98,25 @@ export class VegetationLayers {
         const is_desert: (environment: VegetationEnvironment) => boolean = (environment: VegetationEnvironment): boolean => environment.biome === 'desert'
         const layers: LayerDescription[] = []
 
+        // One medium-detail model per tree that never changes with distance; a lighter one only casts the shadow
         const tree_variants: VegetationVariant[] = []
+        const shadow_tree_variants: VegetationVariant[] = []
         const fir_count: number = 4
         for (let i: number = 0; i < fir_count; i++) {
-            const model: TreeModel = TreeFactory.fir(this.seed + i * 101)
+            const model: TreeModel = TreeFactory.fir(this.seed + i * 101, 'medium')
             tree_variants.push({ geometry: model.geometry, material: [materials.bark, materials.fir_foliage], collider: model.trunk_radius })
+            shadow_tree_variants.push({ geometry: TreeFactory.fir(this.seed + i * 101, 'lite').geometry, material: [materials.bark, materials.fir_foliage], collider: 0 })
         }
         for (let i: number = 0; i < 3; i++) {
-            const model: TreeModel = TreeFactory.broadleaf(this.seed + i * 211 + 7)
+            const model: TreeModel = TreeFactory.broadleaf(this.seed + i * 211 + 7, 'medium')
             tree_variants.push({ geometry: model.geometry, material: [materials.bark, materials.leaf_foliage], collider: model.trunk_radius })
+            shadow_tree_variants.push({ geometry: TreeFactory.broadleaf(this.seed + i * 211 + 7, 'lite').geometry, material: [materials.bark, materials.leaf_foliage], collider: 0 })
         }
         layers.push({
             ...LAYER_DEFAULTS,
             name: 'trees',
             variants: tree_variants,
+            shadow_variants: shadow_tree_variants,
             ring: 4,
             fade: materials.tree_fade,
             spacing: 6.5,
@@ -118,8 +129,11 @@ export class VegetationLayers {
             active: is_forest,
             density: (x: number, z: number): number => this.forestDensity(x, z),
             pick: (x: number, z: number, random: Random): number => {
-                // Conifer and deciduous areas alternate by low-frequency noise; autumn has more deciduous
-                const threshold: number = this.environment().biome === 'autumn' ? 0.25 : -0.15
+                // Conifer and deciduous areas alternate by low-frequency noise; autumn has more deciduous,
+                // a cherry blossom forest has no firs at all
+                const biome: Biome = this.environment().biome
+                if (biome === 'sakura') return fir_count + random.int(0, 2)
+                const threshold: number = biome === 'autumn' ? 0.25 : -0.15
                 const mix: number = this.noise.noise2(x * 0.0021 + 50, z * 0.0021 - 50) + random.range(-0.45, 0.45)
                 return mix > threshold ? random.int(0, fir_count - 1) : fir_count + random.int(0, 2)
             },
@@ -198,6 +212,9 @@ export class VegetationLayers {
             geometry.translate(-box.x, -(geometry.boundingBox?.min.y ?? 0), -box.z)
             fern_variants.push({ geometry: geometry, material: materials.fern, collider: 0 })
         })
+        // The two dense fern models cost over 2000 triangles each: only the light ones are used
+        const light_ferns: VegetationVariant[] = fern_variants.filter((variant: VegetationVariant): boolean => VegetationLayers.triangles(variant.geometry) < 1200)
+        if (light_ferns.length > 0) fern_variants.splice(0, fern_variants.length, ...light_ferns)
         layers.push({
             ...LAYER_DEFAULTS,
             name: 'ferns',
@@ -206,10 +223,11 @@ export class VegetationLayers {
             fade: materials.fern_fade,
             spacing: 2.6,
             min_road: ROAD_HALF_WIDTH + 1.8,
-            max_road: 45,
+            max_road: 32,
             scale_max: 1.5,
-            active: (environment: VegetationEnvironment): boolean => is_forest(environment) && !environment.snow,
-            density: (x: number, z: number): number => this.forestDensity(x, z) * 0.45,
+            // Under blooming cherries the ground is covered only with fallen petals
+            active: (environment: VegetationEnvironment): boolean => is_forest(environment) && !environment.snow && environment.biome !== 'sakura',
+            density: (x: number, z: number): number => this.forestDensity(x, z) * 0.35,
             pick: (_x: number, _z: number, random: Random): number => random.int(0, fern_variants.length - 1),
         })
 
@@ -242,7 +260,9 @@ export class VegetationLayers {
             scale_min: 0.7,
             scale_max: 1.35,
             sink: 0.04,
-            active: (environment: VegetationEnvironment): boolean => !environment.snow,
+            // Tufts follow the slope: their normal is the ground normal, so they catch the same light as the soil
+            align: true,
+            active: (environment: VegetationEnvironment): boolean => !environment.snow && environment.biome !== 'sakura',
             // Desert: sparse tufts of dry grass
             density: (x: number, z: number): number => this.environment().biome === 'desert' ? 0.06 + this.desertDensity(x, z) * 0.18 : 0.65,
             pick: (): number => 0,
@@ -257,6 +277,10 @@ export class VegetationLayers {
             list.push({ geometry: model.geometry, material: material, collider: collide ? model.trunk_radius : 0 })
         }
         return list
+    }
+
+    private static triangles(geometry: BufferGeometry): number {
+        return (geometry.index ? geometry.index.count : geometry.getAttribute('position').count) / 3
     }
 
     /** Grass tuft made of three crossed cards */

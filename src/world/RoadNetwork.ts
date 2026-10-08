@@ -8,6 +8,24 @@ import { CONTROL_SPACING, RAIL_OFFSET, SEGMENT_SAMPLES } from './WorldConfig'
 
 const UP: Vector3 = new Vector3(0, 1, 0)
 
+/** At most this many road branches are considered at one point (overpasses) */
+const MAX_BRANCHES: number = 3
+/** How strongly a height difference counts against lateral distance when choosing the road level */
+const LEVEL_WEIGHT: number = 3
+/** Height below the road at which another branch counts as passing underneath, m */
+const UNDERPASS_DEPTH: number = 3
+
+interface Candidate {
+    ref: SampleRef
+    d2: number
+}
+
+/** Reused candidate records: projectAll runs for every terrain and vegetation sample */
+const CANDIDATES: Candidate[] = []
+let candidate_count: number = 0
+const BRANCH_ALONG: number[] = []
+const PROJECTIONS: RoadProjection[] = []
+
 type SegmentListener = (segment: RoadSegment) => void
 
 /**
@@ -23,8 +41,8 @@ export class RoadNetwork {
     private segment_list: RoadSegment[] = []
     private min_index: number = 0
     private max_index: number = 0
-    private cp_index: GridIndex<ControlPoint> = new GridIndex(64)
-    private sample_index: GridIndex<SampleRef> = new GridIndex(16)
+    private cp_index: GridIndex<ControlPoint> = new GridIndex(32)
+    private sample_index: GridIndex<SampleRef> = new GridIndex(32)
     private generator: RoadGenerator
     private listeners: SegmentListener[] = []
 
@@ -166,7 +184,7 @@ export class RoadNetwork {
         this.segment_list.push(segment)
         for (let i: number = 0; i < SEGMENT_SAMPLES; i++) {
             const p: Vector3 = samples[i].position
-            this.sample_index.insert(p.x, p.z, { segment: segment, sample: i })
+            this.sample_index.insert(p.x, p.z, { segment: segment, sample: i, x: p.x, z: p.z, distance: samples[i].distance })
         }
         for (let i: number = 0; i < this.listeners.length; i++) this.listeners[i](segment)
     }
@@ -191,29 +209,89 @@ export class RoadNetwork {
             if (s.position.y - right_h > 2.2) drop_right = true
         }
 
+        // A section passing over another road is a bridge: guardrails on both sides
+        let bridge: boolean = false
+        for (let i: number = 0; i <= SEGMENT_SAMPLES && !bridge; i += 2) {
+            const s: RoadSample = segment.samples[i]
+            const count: number = this.projectAll(s.position.x, s.position.z, 40, PROJECTIONS)
+            for (let k: number = 0; k < count; k++) {
+                if (PROJECTIONS[k].height < s.position.y - UNDERPASS_DEPTH) bridge = true
+            }
+        }
+
         const random: Random = new Random(Random.hash(this.seed, segment.index, 77))
-        const both: boolean = random.chance(0.14)
+        const both: boolean = random.chance(0.14) || bridge
         segment.rail_right = turn > 0.1 || drop_right || both
         segment.rail_left = turn < -0.1 || drop_left || both
     }
 
-    /** Projects a point onto the centerline of the nearest road section within radius */
-    project(x: number, z: number, radius: number): RoadProjection | null {
-        const best: { ref: SampleRef | null, d2: number } = { ref: null, d2: radius * radius }
-        this.sample_index.query(x, z, radius, (candidate: SampleRef): void => {
-            const p: Vector3 = candidate.segment.samples[candidate.sample].position
-            const dx: number = p.x - x
-            const dz: number = p.z - z
-            const d2: number = dx * dx + dz * dz
-            if (d2 < best.d2) {
-                best.d2 = d2
-                best.ref = candidate
+    /**
+     * Projects a point onto the centerline of the nearest road section within radius.
+     * Where the track passes over itself, y_ref picks the level: the road closest
+     * to that height wins, so a car under an overpass stays on the lower road.
+     */
+    project(x: number, z: number, radius: number, y_ref: number | null = null): RoadProjection | null {
+        const count: number = this.projectAll(x, z, radius, PROJECTIONS)
+        let best: RoadProjection | null = null
+        let best_score: number = Infinity
+        for (let i: number = 0; i < count; i++) {
+            const p: RoadProjection = PROJECTIONS[i]
+            const dy: number = y_ref === null ? 0 : (p.height - y_ref) * LEVEL_WEIGHT
+            const score: number = p.lateral * p.lateral + dy * dy
+            if (score < best_score) {
+                best_score = score
+                best = p
             }
-        })
-        if (!best.ref) return null
+        }
+        return best
+    }
 
-        // Refine the projection onto the two polyline segments adjacent to the nearest sample
-        const ref: SampleRef = best.ref
+    /**
+     * Projects a point onto every distinct road branch within radius: normally one,
+     * two or more near overpasses. Samples closer than twice the radius along the track
+     * belong to the same branch. Returns the count written into out.
+     */
+    projectAll(x: number, z: number, radius: number, out: RoadProjection[]): number {
+        candidate_count = 0
+        const radius_sq: number = radius * radius
+        this.sample_index.query(x, z, radius, (candidate: SampleRef): void => {
+            const dx: number = candidate.x - x
+            const dz: number = candidate.z - z
+            const d2: number = dx * dx + dz * dz
+            if (d2 >= radius_sq) return
+            if (candidate_count === CANDIDATES.length) CANDIDATES.push({ ref: candidate, d2: d2 })
+            const c: Candidate = CANDIDATES[candidate_count++]
+            c.ref = candidate
+            c.d2 = d2
+        })
+
+        const gap: number = radius * 2 + 10
+        let count: number = 0
+        while (count < MAX_BRANCHES) {
+            let best: Candidate | null = null
+            for (let i: number = 0; i < candidate_count; i++) {
+                const c: Candidate = CANDIDATES[i]
+                if (best && c.d2 >= best.d2) continue
+                const along: number = c.ref.distance
+                let taken: boolean = false
+                for (let k: number = 0; k < count; k++) {
+                    if (Math.abs(along - BRANCH_ALONG[k]) < gap) {
+                        taken = true
+                        break
+                    }
+                }
+                if (!taken) best = c
+            }
+            if (!best) break
+            BRANCH_ALONG[count] = best.ref.distance
+            out[count] = this.refine(best.ref, x, z)
+            count++
+        }
+        return count
+    }
+
+    /** Refines the projection onto the two polyline segments adjacent to the nearest sample */
+    private refine(ref: SampleRef, x: number, z: number): RoadProjection {
         const current: RoadSample = ref.segment.samples[ref.sample]
         const after: RoadSample = ref.segment.samples[ref.sample + 1]
         let before: RoadSample | null = null

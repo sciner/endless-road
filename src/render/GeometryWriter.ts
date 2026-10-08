@@ -52,8 +52,12 @@ export class GeometryWriter {
         }
     }
 
-    /** Oriented box; the Z axis is computed as X × Y */
-    box(center: Vector3, axis_x: Vector3, axis_y: Vector3, half_x: number, half_y: number, half_z: number, color: Color | null = null): void {
+    /**
+     * Oriented box; the Z axis is computed as X × Y.
+     * With uv_meters > 0 each face gets UVs in units of uv_meters (texture keeps its scale on long faces),
+     * otherwise every face spans 0..1
+     */
+    box(center: Vector3, axis_x: Vector3, axis_y: Vector3, half_x: number, half_y: number, half_z: number, color: Color | null = null, uv_meters: number = 0): void {
         const axis_z: Vector3 = TMP_Z.crossVectors(axis_x, axis_y).normalize().clone()
         const axes: Vector3[] = [axis_x, axis_y, axis_z]
         const halves: number[] = [half_x, half_y, half_z]
@@ -74,7 +78,9 @@ export class GeometryWriter {
                     const p: Vector3 = face_center.clone()
                         .addScaledVector(au, hu * corners[k][0])
                         .addScaledVector(av, hv * corners[k][1])
-                    this.vertex(p, normal, (corners[k][0] + 1) * 0.5, (corners[k][1] + 1) * 0.5, color)
+                    const su: number = uv_meters > 0 ? (hu * 2) / uv_meters : 1
+                    const sv: number = uv_meters > 0 ? (hv * 2) / uv_meters : 1
+                    this.vertex(p, normal, (corners[k][0] + 1) * 0.5 * su, (corners[k][1] + 1) * 0.5 * sv, color)
                 }
                 this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
             }

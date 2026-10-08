@@ -89,7 +89,7 @@ export class CameraRig {
         const angle: number = car.render_yaw + Math.PI * 0.5 + Math.sin(this.showcase_angle) * SHOWCASE_ARC
         const x: number = car_position.x + Math.sin(angle) * SHOWCASE_RADIUS
         const z: number = car_position.z + Math.cos(angle) * SHOWCASE_RADIUS
-        const ground: number = surface.drive(x, z).height
+        const ground: number = surface.drive(x, z, car_position.y).height
         this.camera.position.set(x, Math.max(car_position.y + 1.25, ground + 0.8), z)
         this.camera.up.copy(UP)
 
@@ -138,7 +138,7 @@ export class CameraRig {
         const radius: number = MathUtils.lerp(Math.hypot(start.x, start.z), Math.hypot(end.x, end.z), t)
         const height: number = MathUtils.lerp(start.y, end.y, t) + Math.sin(Math.PI * t) * TRANSITION_LIFT
         const eye: Vector3 = new Vector3(Math.sin(angle) * radius, height, Math.cos(angle) * radius).add(car_position)
-        eye.y = Math.max(eye.y, surface.drive(eye.x, eye.z).height + 0.6)
+        eye.y = Math.max(eye.y, surface.drive(eye.x, eye.z, car_position.y).height + 0.6)
 
         const end_look: Vector3 = new Vector3().subVectors(this.look_point, car_position)
         const look: Vector3 = new Vector3().lerpVectors(this.transition_look, end_look, t).add(car_position)
@@ -182,10 +182,11 @@ export class CameraRig {
             this.position.y = MathUtils.damp(this.position.y, target.y, mode.stiffness * 1.5, dt)
 
             // Keep the camera above the terrain
-            const ground: number = surface.drive(this.position.x, this.position.z).height
+            const ground: number = surface.drive(this.position.x, this.position.z, car_position.y).height
             this.position.y = Math.max(this.position.y, ground + 0.6)
 
-            const shake: number = car.impact * 0.12 + car.landing_impact * 0.06 + Math.max(0, speed - 40) * 0.0006
+            // Only impacts and landings shake the camera. A constant speed shake made the car on screen trace a figure-eight
+            const shake: number = car.impact * 0.12 + car.landing_impact * 0.06
             this.camera.up.copy(UP)
             this.camera.position.copy(this.position)
             this.camera.position.x += Math.sin(this.shake_time * 37) * shake

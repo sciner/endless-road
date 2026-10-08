@@ -1,4 +1,5 @@
 import { lang } from '../i18n/Lang'
+import { gamepadDiagram } from './GamepadDiagram'
 
 /** Cyclable menu setting: label and value in the active language, and a change towards direction (−1 / 1) */
 export interface MenuOption {
@@ -41,21 +42,6 @@ function keyboardControls(): Array<[string, string]> {
         ['H', lang.action_help],
         ['F3', lang.action_debug],
         ['Esc', lang.action_pause],
-    ]
-}
-
-/** Gamepad reference rows in Xbox / PlayStation notation */
-function gamepadControls(): Array<[string, string]> {
-    return [
-        ['RT / R2', lang.action_throttle],
-        ['LT / L2', lang.action_brake],
-        [lang.key_left_stick, lang.action_steer],
-        ['A / ✕', lang.action_handbrake],
-        ['Y / △', lang.action_camera],
-        ['X / □', lang.action_random_environment],
-        ['B / ○', lang.action_reset],
-        ['Back / Share', lang.action_help],
-        ['Start / Options', lang.action_pause],
     ]
 }
 
@@ -219,20 +205,24 @@ export class MainMenu {
         }
     }
 
+    /** Keyboard table and the labelled gamepad drawing side by side */
     private renderControls(): void {
-        this.addHeading(lang.menu_controls)
-        this.addControlsTable(keyboardControls())
-        this.addHeading(lang.gamepad)
-        this.addControlsTable(gamepadControls())
-    }
-
-    private addControlsTable(rows: Array<[string, string]>): void {
-        const table: HTMLElement = document.createElement('div')
-        table.className = 'menu-controls'
-        table.innerHTML = rows
+        const columns: HTMLElement = document.createElement('div')
+        columns.className = 'menu-controls-columns'
+        const keyboard_rows: string = keyboardControls()
             .map((row: [string, string]): string => `<span class="menu-key">${row[0]}</span><span class="menu-action">${row[1]}</span>`)
             .join('')
-        this.content.appendChild(table)
+        columns.innerHTML = `
+            <div>
+                <div class="menu-heading">${lang.menu_controls}</div>
+                <div class="menu-controls">${keyboard_rows}</div>
+            </div>
+            <div>
+                <div class="menu-heading">${lang.gamepad}</div>
+                ${gamepadDiagram()}
+            </div>
+        `
+        this.content.appendChild(columns)
     }
 
     private addHeading(text: string): void {

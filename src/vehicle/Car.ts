@@ -30,7 +30,8 @@ export class Car {
         this.model = new CarModel(gltf, profile.look)
         this.physics = new CarPhysics(this.model.wheelbase, this.model.width, this.model.length, profile.spec)
         // Shadow is attached to the root, not the body: it lies on the ground and does not sway with the suspension
-        this.contact_shadow = new CarContactShadow(this.model.width, this.model.length)
+        const wheels: number[][] = this.model.wheels.map((wheel: CarWheel): number[] => [wheel.steer.position.x, wheel.steer.position.z])
+        this.contact_shadow = new CarContactShadow(this.model.width, this.model.length, wheels)
         this.model.root.add(this.contact_shadow.mesh)
     }
 
@@ -38,9 +39,9 @@ export class Car {
         return this.physics.position
     }
 
-    /** Places the car on the road centerline, facing the direction of travel */
+    /** Places the car on the road centerline, facing the direction of travel; at an overpass, on the level nearest to the car */
     placeOnRoad(surface: WorldSurface, x: number, z: number): void {
-        const projection: RoadProjection | null = surface.road.project(x, z, 400)
+        const projection: RoadProjection | null = surface.road.project(x, z, 400, this.physics.position.y)
         if (!projection) return
         const position: Vector3 = new Vector3(
             x - projection.right.x * projection.lateral + projection.right.x * 1.9,

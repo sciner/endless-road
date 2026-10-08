@@ -25,6 +25,8 @@ export const zh: LangStrings = {
     action_help: '提示',
     action_debug: '技术信息',
     action_pause: '暂停和菜单',
+    action_free_camera: '自由视角',
+    free_camera_hint: '自由视角：鼠标观察，WASD 飞行，空格 / Shift 上升和下降，Q 加速，滚轮调整速度，F10 返回',
     action_hide: '隐藏',
 
     menu_footer: '↑ ↓ 选择 · Enter / A 确认 · Esc / B 返回',
@@ -67,6 +69,7 @@ export const zh: LangStrings = {
     weather_fog: '大雾',
     biome_forest: '森林',
     biome_autumn: '秋林',
+    biome_sakura: '樱花',
     biome_desert: '沙漠',
 
     gamepad_connected: '手柄已连接：{name}',

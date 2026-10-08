@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { OverlayPass } from './OverlayPass'
 
-/** Cinematic color grading: cool tint, vignette, chromatic aberration, grain */
+/** Cinematic color grading: cool tint, vignette, grain */
 const GRADE_SHADER: { uniforms: Record<string, { value: unknown }>, vertexShader: string, fragmentShader: string } = {
     uniforms: {
         tDiffuse: { value: null },
@@ -27,12 +27,9 @@ const GRADE_SHADER: { uniforms: Record<string, { value: unknown }>, vertexShader
         varying vec2 vUv;
         void main() {
             vec2 c = vUv - 0.5;
-            float edge = dot(c, c);
-            vec2 shift = c * edge * 0.004;
-            vec3 color;
-            color.r = texture2D(tDiffuse, vUv - shift).r;
-            color.g = texture2D(tDiffuse, vUv).g;
-            color.b = texture2D(tDiffuse, vUv + shift).b;
+            // No chromatic aberration: it shifts red and blue by about a pixel, and pixel-thin
+            // raindrops split into red-blue dots that read as pink drops at the frame sides
+            vec3 color = texture2D(tDiffuse, vUv).rgb;
 
             float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
             vec3 tinted = color * uShadowTint;

@@ -1,5 +1,16 @@
 import { IUniform, ShaderChunk, Vector2, WebGLProgramParametersWithUniforms } from 'three'
 
+/**
+ * World-space texture coordinates are taken relative to an origin snapped to this grid around the camera.
+ * Tens of kilometers from the world origin a float32 varying keeps only millimeters, and its interpolation
+ * makes ground patterns crawl as the camera moves. Every world-space frequency below times this period
+ * must be a whole number, so a jump of the origin to the next cell leaves all patterns unchanged.
+ */
+const WORLD_UV_PERIOD: string = '6000.0'
+
+/** World position relative to the snapped origin: only xz is shifted */
+const WORLD_UV_ORIGIN_GLSL: string = /* glsl */ `vec3(floor(cameraPosition.x / ${WORLD_UV_PERIOD}) * ${WORLD_UV_PERIOD}, 0.0, floor(cameraPosition.z / ${WORLD_UV_PERIOD}) * ${WORLD_UV_PERIOD})`
+
 /** Shared GLSL hash functions */
 const HASH_GLSL: string = /* glsl */ `
 float rpHash12(vec2 p) {
@@ -57,15 +68,15 @@ vec4 rpNoTile(sampler2D tex, vec2 uv, vec2 world) {
  * Modifications of standard three.js shaders via onBeforeCompile
  */
 export class ShaderPatches {
-    /** Adds the fragment world position to the vRpWorld varying */
+    /** Adds the fragment world position, relative to the snapped origin (see WORLD_UV_PERIOD), to the vRpWorld varying */
     private static injectWorldPosition(shader: WebGLProgramParametersWithUniforms): void {
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vRpWorld;')
             .replace('#include <project_vertex>', `#include <project_vertex>
                 #ifdef USE_INSTANCING
-                    vRpWorld = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+                    vRpWorld = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz - ${WORLD_UV_ORIGIN_GLSL};
                 #else
-                    vRpWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                    vRpWorld = (modelMatrix * vec4(transformed, 1.0)).xyz - ${WORLD_UV_ORIGIN_GLSL};
                 #endif`)
         shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vRpWorld;')
     }
@@ -134,6 +145,10 @@ export class ShaderPatches {
                 uniform sampler2D uPuddleMap;
                 uniform vec3 uDirtColor;
                 uniform float uShoulderRoughness;
+                uniform sampler2D uLitterMap;
+                uniform vec3 uLitterColors[3];
+                uniform float uLitterAmount;
+                uniform float uLitterTint;
                 varying float vRoadMask;
                 ${NO_TILE_GLSL}`)
             .replace('#include <roughnessmap_fragment>', `${no_tile(ShaderChunk.roughnessmap_fragment, 'texture2D( roughnessMap, vRoughnessMapUv )', 'roughnessMap', 'vRoughnessMapUv')}
@@ -144,12 +159,27 @@ export class ShaderPatches {
                 float rpMid = texture2D(uPuddleMap, vRpWorld.xz * 0.03 + 0.5).r;
                 diffuseColor.rgb *= mix(0.55, 1.2, rpMacro) * mix(0.8, 1.1, rpMid);
                 vec3 rpDirt = uDirtColor * (0.7 + rpMid * 0.6);
-                diffuseColor.rgb = mix(diffuseColor.rgb, rpDirt, vRoadMask * 0.9);`)
+                diffuseColor.rgb = mix(diffuseColor.rgb, rpDirt, vRoadMask * 0.9);
+                // Fallen leaves: patchy carpet, thicker along the road shoulder where they drift.
+                // Two differently rotated layers hide the tiling; a leaf shows when its id is below the density
+                if (uLitterAmount > 0.0) {
+                    float rpPatch = texture2D(uPuddleMap, vRpWorld.xz * 0.013 + 0.37).r;
+                    float rpCover = uLitterAmount * clamp(smoothstep(0.3, 0.7, rpPatch) * 0.85 + vRoadMask * 0.5, 0.0, 0.95);
+                    vec2 rpLitterUv = vRpWorld.xz / 3.0;
+                    vec4 rpLeafA = texture2D(uLitterMap, rpLitterUv);
+                    vec4 rpLeafB = texture2D(uLitterMap, mat2(0.8, -0.6, 0.6, 0.8) * rpLitterUv * 1.31 + 0.5);
+                    float rpShowB = smoothstep(0.35, 0.65, rpLeafB.a) * step(rpLeafB.b, rpCover);
+                    vec4 rpLeaf = rpShowB > 0.5 ? rpLeafB : rpLeafA;
+                    float rpShow = smoothstep(0.35, 0.65, rpLeaf.a) * step(rpLeaf.b, rpCover);
+                    vec3 rpLeafColor = rpLeaf.r < 0.4 ? uLitterColors[0] : rpLeaf.r < 0.75 ? uLitterColors[1] : uLitterColors[2];
+                    diffuseColor.rgb = mix(diffuseColor.rgb, rpLeafColor * (0.45 + rpLeaf.g * 0.6) * uLitterTint, rpShow);
+                }`)
     }
 
     /**
      * Autumn foliage recolor: hue comes from uRecolorColor with per-instance variation
-     * toward yellow, brightness from the texture. uRecolor = 0 keeps the original color.
+     * toward uRecolorAlt (yellow in autumn, white in cherry blossom), brightness from the texture,
+     * its contrast lowered by uRecolorSoft. uRecolor = 0 keeps the original color.
      */
     static recolor(shader: WebGLProgramParametersWithUniforms, uniforms: Record<string, IUniform>): void {
         Object.assign(shader.uniforms, uniforms)
@@ -164,12 +194,15 @@ export class ShaderPatches {
         shader.fragmentShader = shader.fragmentShader
             .replace('#include <common>', `#include <common>
                 uniform vec3 uRecolorColor;
+                uniform vec3 uRecolorAlt;
+                uniform float uRecolorSoft;
                 uniform float uRecolor;
                 varying float vRpHue;`)
             .replace('#include <color_fragment>', `#include <color_fragment>
                 if (uRecolor > 0.0) {
                     float rpLum = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-                    vec3 rpHueColor = mix(uRecolorColor, vec3(0.92, 0.66, 0.16), vRpHue * vRpHue);
+                    rpLum = mix(rpLum, max(rpLum, 0.24), uRecolorSoft);
+                    vec3 rpHueColor = mix(uRecolorColor, uRecolorAlt, vRpHue * vRpHue);
                     diffuseColor.rgb = mix(diffuseColor.rgb, rpHueColor * rpLum * 3.2, uRecolor);
                 }`)
     }
@@ -185,10 +218,10 @@ export class ShaderPatches {
             .replace('#include <begin_vertex>', `#include <begin_vertex>
                 #ifdef USE_INSTANCING
                     vRpUp = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal).y;
-                    vRpSnowUv = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xz;
+                    vRpSnowUv = (modelMatrix * instanceMatrix * vec4(transformed, 1.0) - vec4(${WORLD_UV_ORIGIN_GLSL}, 0.0)).xz;
                 #else
                     vRpUp = normalize(mat3(modelMatrix) * objectNormal).y;
-                    vRpSnowUv = (modelMatrix * vec4(transformed, 1.0)).xz;
+                    vRpSnowUv = (modelMatrix * vec4(transformed, 1.0) - vec4(${WORLD_UV_ORIGIN_GLSL}, 0.0)).xz;
                 #endif`)
         shader.fragmentShader = shader.fragmentShader
             .replace('#include <common>', `#include <common>
@@ -202,6 +235,46 @@ export class ShaderPatches {
                     float rpCover = smoothstep(0.15, 0.55, vRpUp + (rpFlake - 0.5) * 0.5) * uSnow;
                     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.68, 0.7, 0.75), rpCover);
                 }`)
+    }
+
+    /**
+     * Leaves and grass are not glossy: without this, low sun behind them is mirrored
+     * off their upward normals at a grazing angle and whole cards light up and bloom
+     */
+    static matte(shader: WebGLProgramParametersWithUniforms, specular: number): void {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+                reflectedLight.directSpecular *= ${specular.toFixed(3)};
+                reflectedLight.indirectSpecular *= ${specular.toFixed(3)};`)
+    }
+
+    /**
+     * Grass blends into the ground: its albedo is the terrain color (the blade texture only adds
+     * darker roots and lighter tips). Tuft normals are the slope normal (the layer is aligned to
+     * the terrain), so a tuft gets the same light as the soil it grows from
+     */
+    static groundMatch(shader: WebGLProgramParametersWithUniforms, uniforms: Record<string, IUniform>): void {
+        Object.assign(shader.uniforms, uniforms)
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', `#include <common>
+                varying vec2 vRpGroundXz;`)
+            .replace('#include <begin_vertex>', `#include <begin_vertex>
+                #ifdef USE_INSTANCING
+                    vRpGroundXz = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz - ${WORLD_UV_ORIGIN_GLSL}.xz;
+                #else
+                    vRpGroundXz = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz - ${WORLD_UV_ORIGIN_GLSL}.xz;
+                #endif`)
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', `#include <common>
+                uniform vec3 uGroundColor;
+                uniform sampler2D uGroundNoise;
+                varying vec2 vRpGroundXz;`)
+            .replace('#include <color_fragment>', `#include <color_fragment>
+                // Same large-scale light/dark patches as the terrain shader at the tuft's root
+                float rpGroundMacro = texture2D(uGroundNoise, vRpGroundXz * 0.0035).r;
+                float rpGroundMid = texture2D(uGroundNoise, vRpGroundXz * 0.03 + 0.5).r;
+                float rpBladeLum = sqrt(dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114)));
+                diffuseColor.rgb = uGroundColor * mix(0.55, 1.2, rpGroundMacro) * mix(0.8, 1.1, rpGroundMid)
+                    * mix(0.85, 1.1, smoothstep(0.08, 0.3, rpBladeLum));`)
     }
 
     /**

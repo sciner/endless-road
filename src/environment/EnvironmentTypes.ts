@@ -3,7 +3,7 @@ import { LangKey } from '../i18n/locales/en'
 
 export type TimeOfDay = 'dawn' | 'day' | 'sunset' | 'night'
 export type Weather = 'clear' | 'rain' | 'snow' | 'fog'
-export type Biome = 'forest' | 'autumn' | 'desert'
+export type Biome = 'forest' | 'autumn' | 'sakura' | 'desert'
 
 /** Environment chosen by the player: time of day, weather and terrain */
 export interface EnvironmentSettings {
@@ -14,7 +14,7 @@ export interface EnvironmentSettings {
 
 export const TIMES: TimeOfDay[] = ['dawn', 'day', 'sunset', 'night']
 export const WEATHERS: Weather[] = ['clear', 'rain', 'snow', 'fog']
-export const BIOMES: Biome[] = ['forest', 'autumn', 'desert']
+export const BIOMES: Biome[] = ['forest', 'autumn', 'sakura', 'desert']
 
 export const DEFAULT_ENVIRONMENT: EnvironmentSettings = { time: 'night', weather: 'rain', biome: 'forest' }
 

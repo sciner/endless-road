@@ -25,6 +25,8 @@ export const ru: LangStrings = {
     action_help: 'подсказки',
     action_debug: 'техническая информация',
     action_pause: 'пауза и меню',
+    action_free_camera: 'свободная камера',
+    free_camera_hint: 'Свободная камера: мышь — обзор, WASD — полёт, Пробел / Shift — вверх и вниз, Q — быстрее, колесо — скорость, F10 — назад',
     action_hide: 'скрыть',
 
     menu_footer: '↑ ↓ выбор · Enter / A подтвердить · Esc / B назад',
@@ -67,6 +69,7 @@ export const ru: LangStrings = {
     weather_fog: 'Туман',
     biome_forest: 'Лес',
     biome_autumn: 'Осенний лес',
+    biome_sakura: 'Цветущая сакура',
     biome_desert: 'Пустыня',
 
     gamepad_connected: 'Геймпад подключён: {name}',

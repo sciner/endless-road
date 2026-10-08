@@ -25,6 +25,8 @@ export const ja: LangStrings = {
     action_help: 'ヒント',
     action_debug: '技術情報',
     action_pause: 'ポーズとメニュー',
+    action_free_camera: 'フリーカメラ',
+    free_camera_hint: 'フリーカメラ：マウスで視点、WASDで移動、スペース / Shiftで上下、Qで加速、ホイールで速度、F10で戻る',
     action_hide: '隠す',
 
     menu_footer: '↑ ↓ 選択 · Enter / A 決定 · Esc / B 戻る',
@@ -67,6 +69,7 @@ export const ja: LangStrings = {
     weather_fog: '霧',
     biome_forest: '森',
     biome_autumn: '秋の森',
+    biome_sakura: '桜',
     biome_desert: '砂漠',
 
     gamepad_connected: 'ゲームパッド接続：{name}',

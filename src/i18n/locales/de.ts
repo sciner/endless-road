@@ -25,6 +25,8 @@ export const de: LangStrings = {
     action_help: 'Hinweise',
     action_debug: 'technische Infos',
     action_pause: 'Pause und Menü',
+    action_free_camera: 'freie Kamera',
+    free_camera_hint: 'Freie Kamera: Maus zum Umsehen, WASD zum Fliegen, Leertaste / Shift hoch und runter, Q schneller, Mausrad ändert das Tempo, F10 zurück',
     action_hide: 'ausblenden',
 
     menu_footer: '↑ ↓ Auswahl · Enter / A bestätigen · Esc / B zurück',
@@ -67,6 +69,7 @@ export const de: LangStrings = {
     weather_fog: 'Nebel',
     biome_forest: 'Wald',
     biome_autumn: 'Herbstwald',
+    biome_sakura: 'Kirschblüte',
     biome_desert: 'Wüste',
 
     gamepad_connected: 'Gamepad verbunden: {name}',

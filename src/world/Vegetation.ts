@@ -31,6 +31,9 @@ export interface VegetationStats {
 }
 
 const INITIAL_CAPACITY: number = 512
+const UP: Vector3 = new Vector3(0, 1, 0)
+const SLOPE_NORMAL: Vector3 = new Vector3()
+const SLOPE_ROTATION: Quaternion = new Quaternion()
 /** Layer visible only to shadow cameras */
 export const SHADOW_LAYER: number = 1
 /** Radius in chunks within which trees cast shadows */
@@ -87,7 +90,7 @@ export class Vegetation {
             layer.fade.value.set(hidden * FADE_START, hidden)
             for (let v: number = 0; v < layer.variants.length; v++) {
                 layer.meshes.push(this.createMesh(layer.variants[v], INITIAL_CAPACITY, false))
-                if (layer.cast_shadow) layer.shadow_meshes.push(this.createMesh(layer.variants[v], INITIAL_CAPACITY, true))
+                if (layer.cast_shadow) layer.shadow_meshes.push(this.createMesh(Vegetation.shadowVariant(layer, v), INITIAL_CAPACITY, true))
             }
         }
     }
@@ -206,6 +209,7 @@ export class Vegetation {
                     euler.set(layer_random.range(-layer.tilt, layer.tilt), layer_random.next() * Math.PI * 2, layer_random.range(-layer.tilt, layer.tilt))
                     rotation.setFromEuler(euler)
                     position.set(x, point.height - layer.sink * s, z)
+                    if (layer.align) this.alignToSlope(x, z, rotation)
                     scale.set(s * stretch, s, s * stretch)
                     matrix.compose(position, rotation, scale)
                     const list: number[] = matrices[variant]
@@ -223,19 +227,34 @@ export class Vegetation {
         return data
     }
 
+    /** Shadows are soft and small on screen, so they use the lighter model when there is one */
+    private static shadowVariant(layer: VegetationLayer, v: number): VegetationVariant {
+        return layer.shadow_variants ? layer.shadow_variants[v] : layer.variants[v]
+    }
+
+    /** Tilts the rotation so the instance lies along the terrain slope */
+    private alignToSlope(x: number, z: number, rotation: Quaternion): void {
+        const d: number = 0.8
+        const dx: number = this.surface.height(x + d, z) - this.surface.height(x - d, z)
+        const dz: number = this.surface.height(x, z + d) - this.surface.height(x, z - d)
+        SLOPE_NORMAL.set(-dx / (2 * d), 1, -dz / (2 * d)).normalize()
+        SLOPE_ROTATION.setFromUnitVectors(UP, SLOPE_NORMAL)
+        rotation.premultiply(SLOPE_ROTATION)
+    }
+
     /** Copies instances of all active chunks into the shared InstancedMesh objects */
     private rebuildInstances(): void {
         for (let l: number = 0; l < this.layers.length; l++) {
             const layer: VegetationLayer = this.layers[l]
             for (let v: number = 0; v < layer.variants.length; v++) {
-                layer.meshes[v] = this.fillMesh(layer.meshes[v], l, v, layer.ring, false)
-                if (layer.cast_shadow) layer.shadow_meshes[v] = this.fillMesh(layer.shadow_meshes[v], l, v, SHADOW_RING, true)
+                layer.meshes[v] = this.fillMesh(layer.meshes[v], l, v, layer.ring, false, layer.variants[v])
+                if (layer.cast_shadow) layer.shadow_meshes[v] = this.fillMesh(layer.shadow_meshes[v], l, v, SHADOW_RING, true, Vegetation.shadowVariant(layer, v))
             }
         }
     }
 
     /** Fills the mesh with instances from chunks within ring; returns a new mesh if capacity is insufficient */
-    private fillMesh(source_mesh: InstancedMesh, l: number, v: number, ring: number, shadow: boolean): InstancedMesh {
+    private fillMesh(source_mesh: InstancedMesh, l: number, v: number, ring: number, shadow: boolean, variant: VegetationVariant): InstancedMesh {
         let total: number = 0
         const sources: ChunkVegetation[] = []
         for (const chunk of this.chunks.values()) {
@@ -249,7 +268,7 @@ export class Vegetation {
         if (total > mesh.instanceMatrix.count) {
             this.root.remove(mesh)
             mesh.dispose()
-            mesh = this.createMesh(this.layers[l].variants[v], Math.ceil(total * 1.5), shadow)
+            mesh = this.createMesh(variant, Math.ceil(total * 1.5), shadow)
         }
 
         const matrix_array: Float32Array = mesh.instanceMatrix.array as Float32Array
@@ -266,6 +285,75 @@ export class Vegetation {
         mesh.instanceMatrix.needsUpdate = true
         color_attribute.needsUpdate = true
         return mesh
+    }
+
+    /**
+     * Pushes a rectangle centered at position, facing yaw, out of trunks and rocks.
+     * previous is the center a step earlier: when a trunk ends up inside the body,
+     * it is pushed back out through the face it came in by, not the nearest one.
+     * Returns the collision normal or null.
+     */
+    collideBox(position: Vector3, previous: Vector3, yaw: number, half_width: number, half_length: number): Vector3 | null {
+        const fx: number = Math.sin(yaw)
+        const fz: number = Math.cos(yaw)
+        const ccx: number = Math.floor(position.x / TERRAIN_CHUNK_SIZE)
+        const ccz: number = Math.floor(position.z / TERRAIN_CHUNK_SIZE)
+        let normal: Vector3 | null = null
+        for (let dz: number = -1; dz <= 1; dz++) {
+            for (let dx: number = -1; dx <= 1; dx++) {
+                const chunk: ChunkVegetation | undefined = this.chunks.get(Vegetation.key(ccx + dx, ccz + dz))
+                if (!chunk) continue
+                const list: number[] = chunk.colliders
+                for (let i: number = 0; i < list.length; i += 3) {
+                    // Collider center in the body frame: f along the nose, r to the side (r = (-fz, fx))
+                    const ex: number = list[i] - position.x
+                    const ez: number = list[i + 1] - position.z
+                    const radius: number = list[i + 2]
+                    const lf: number = ex * fx + ez * fz
+                    const lr: number = -ex * fz + ez * fx
+                    if (Math.abs(lf) > half_length + radius || Math.abs(lr) > half_width + radius) continue
+                    const cf: number = Math.max(-half_length, Math.min(half_length, lf))
+                    const cr: number = Math.max(-half_width, Math.min(half_width, lr))
+                    const of: number = lf - cf
+                    const or: number = lr - cr
+                    const d2: number = of * of + or * or
+                    if (d2 >= radius * radius) continue
+                    // Local push direction away from the collider and its depth
+                    let nf: number
+                    let nr: number
+                    let push: number
+                    if (d2 > 1e-8) {
+                        const d: number = Math.sqrt(d2)
+                        nf = -of / d
+                        nr = -or / d
+                        push = radius - d
+                    } else {
+                        // Collider center inside the body: leave through the face it entered by
+                        const px: number = list[i] - previous.x
+                        const pz: number = list[i + 1] - previous.z
+                        const out_f: number = Math.abs(px * fx + pz * fz) - half_length
+                        const out_r: number = Math.abs(-px * fz + pz * fx) - half_width
+                        const pen_f: number = half_length - Math.abs(lf) + radius
+                        const pen_r: number = half_width - Math.abs(lr) + radius
+                        if (out_f > out_r) {
+                            nf = lf >= 0 ? -1 : 1
+                            nr = 0
+                            push = pen_f
+                        } else {
+                            nf = 0
+                            nr = lr >= 0 ? -1 : 1
+                            push = pen_r
+                        }
+                    }
+                    const nx: number = fx * nf - fz * nr
+                    const nz: number = fz * nf + fx * nr
+                    position.x += nx * push
+                    position.z += nz * push
+                    normal = new Vector3(nx, 0, nz)
+                }
+            }
+        }
+        return normal
     }
 
     /**

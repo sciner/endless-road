@@ -22,18 +22,34 @@ export class Input {
     private connection_listeners: Array<(name: string, connected: boolean) => void> = []
     private gamepad: GamepadInput
     private pad: GamepadState = { steer: 0, throttle: 0, brake: 0, handbrake: false }
+    /** Mouse movement while the pointer is locked and wheel notches, gathered until taken */
+    private mouse_x: number = 0
+    private mouse_y: number = 0
+    private wheel: number = 0
 
     constructor() {
         window.addEventListener('keydown', (event: KeyboardEvent): void => {
             if (!this.held.has(event.code)) this.pressed.add(event.code)
             this.held.add(event.code)
-            // Arrows and Space scroll the page, F3 opens the browser's find bar
-            if (event.code.startsWith('Arrow') || event.code === 'Space' || event.code === 'F3') event.preventDefault()
+            // Arrows and Space scroll the page, F3 opens the browser's find bar, F10 focuses the browser menu
+            if (event.code.startsWith('Arrow') || event.code === 'Space' || event.code === 'F3' || event.code === 'F10') {
+                event.preventDefault()
+            }
             for (let i: number = 0; i < this.listeners.length; i++) this.listeners[i]()
         })
         window.addEventListener('pointerdown', (): void => {
             for (let i: number = 0; i < this.listeners.length; i++) this.listeners[i]()
         })
+        window.addEventListener('mousemove', (event: MouseEvent): void => {
+            if (!document.pointerLockElement) return
+            // Some browsers report a huge jump right after the lock: such events are dropped
+            if (Math.abs(event.movementX) > 400 || Math.abs(event.movementY) > 400) return
+            this.mouse_x += event.movementX
+            this.mouse_y += event.movementY
+        })
+        window.addEventListener('wheel', (event: WheelEvent): void => {
+            this.wheel += Math.sign(event.deltaY)
+        }, { passive: true })
         window.addEventListener('keyup', (event: KeyboardEvent): void => {
             this.held.delete(event.code)
         })
@@ -86,6 +102,21 @@ export class Input {
     /** All keys pressed since the last endFrame call */
     pressedKeys(): string[] {
         return Array.from(this.pressed)
+    }
+
+    /** Mouse movement since the last call, px */
+    takeMouse(): { x: number, y: number } {
+        const delta: { x: number, y: number } = { x: this.mouse_x, y: this.mouse_y }
+        this.mouse_x = 0
+        this.mouse_y = 0
+        return delta
+    }
+
+    /** Wheel notches since the last call: positive is towards the user */
+    takeWheel(): number {
+        const wheel: number = this.wheel
+        this.wheel = 0
+        return wheel
     }
 
     endFrame(): void {
