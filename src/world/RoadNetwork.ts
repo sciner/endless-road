@@ -74,6 +74,42 @@ export class RoadNetwork {
         return this.segment_list
     }
 
+    /**
+     * Centerline pose at a distance along the track. Null when that part of the road
+     * has not been generated yet.
+     */
+    sampleAlong(distance: number): RoadSample | null {
+        let lo: number = this.min_index + 1
+        let hi: number = this.max_index - 2
+        while (lo <= hi) {
+            const mid: number = (lo + hi) >> 1
+            const segment: RoadSegment | undefined = this.segments.get(mid)
+            if (!segment) return null
+            if (distance < segment.start_distance) {
+                hi = mid - 1
+                continue
+            }
+            if (distance > segment.start_distance + segment.length) {
+                lo = mid + 1
+                continue
+            }
+            const samples: RoadSample[] = segment.samples
+            let index: number = 0
+            while (index < samples.length - 1 && samples[index + 1].distance < distance) index++
+            const a: RoadSample = samples[index]
+            const b: RoadSample = samples[Math.min(index + 1, samples.length - 1)]
+            const span: number = b.distance - a.distance
+            const t: number = span > 1e-4 ? (distance - a.distance) / span : 0
+            return {
+                position: new Vector3().lerpVectors(a.position, b.position, t),
+                tangent: new Vector3().lerpVectors(a.tangent, b.tangent, t).normalize(),
+                right: new Vector3().lerpVectors(a.right, b.right, t).normalize(),
+                distance: distance,
+            }
+        }
+        return null
+    }
+
     get segment_count(): number {
         return this.segment_list.length
     }
@@ -230,6 +266,25 @@ export class RoadNetwork {
      * Where the track passes over itself, y_ref picks the level: the road closest
      * to that height wins, so a car under an overpass stays on the lower road.
      */
+    /**
+     * The single nearest centerline within radius. Unlike the branched query, two roads that
+     * pass near each other are both eligible, so a pole can tell that it stands on the lower deck.
+     */
+    closest(x: number, z: number, radius: number): RoadProjection | null {
+        const best: { ref: SampleRef | null, d2: number } = { ref: null, d2: radius * radius }
+        this.sample_index.query(x, z, radius, (candidate: SampleRef): void => {
+            const dx: number = candidate.x - x
+            const dz: number = candidate.z - z
+            const d2: number = dx * dx + dz * dz
+            if (d2 < best.d2) {
+                best.d2 = d2
+                best.ref = candidate
+            }
+        })
+        if (!best.ref) return null
+        return this.refine(best.ref, x, z)
+    }
+
     project(x: number, z: number, radius: number, y_ref: number | null = null): RoadProjection | null {
         const count: number = this.projectAll(x, z, radius, PROJECTIONS)
         let best: RoadProjection | null = null

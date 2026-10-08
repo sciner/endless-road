@@ -1,5 +1,6 @@
 import {
-    Color, DynamicDrawUsage, Euler, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Scene, Vector3,
+    Box3, Camera, Color, DynamicDrawUsage, Euler, Frustum, Group, InstancedBufferAttribute, InstancedMesh, Matrix4,
+    Quaternion, Scene, Vector3,
 } from 'three'
 import { Random } from '../core/Random'
 import { SimplexNoise } from '../core/SimplexNoise'
@@ -42,6 +43,11 @@ const SHADOW_RING: number = 1
 const FADE_MARGIN: number = 14
 /** Fraction of the view distance at which dissolve starts */
 const FADE_START: number = 0.62
+/** A plant can lean out of its chunk by about this much, so the cull box is wider than the chunk, m */
+const CULL_MARGIN: number = 16
+/** Vertical span of a chunk box: terrain relief plus the tallest crown, m */
+const CULL_BOTTOM: number = -40
+const CULL_TOP: number = 160
 
 /**
  * Vegetation and roadside objects around the road. Instances are generated per chunk
@@ -58,6 +64,12 @@ export class Vegetation {
     private center_cz: number = Number.NaN
     private max_ring: number = 0
     private environment: VegetationEnvironment = { biome: 'forest', snow: false }
+    private frustum: Frustum = new Frustum()
+    private frustum_matrix: Matrix4 = new Matrix4()
+    private chunk_box: Box3 = new Box3()
+    /** Chunks currently inside the camera frustum; empty until the first cull, which draws everything */
+    private visible_chunks: Set<string> = new Set()
+    private visible_signature: string = ''
 
     constructor(scene: Scene, surface: WorldSurface, materials: WorldMaterials, assets: AssetLibrary, seed: number) {
         this.surface = surface
@@ -167,6 +179,41 @@ export class Vegetation {
         if (changed) this.rebuildInstances()
     }
 
+    /**
+     * Drops chunks outside the camera view from the rendered meshes. One mesh per model stays,
+     * so the draw call count does not grow; the vertex work does, because hidden chunks are no longer in it.
+     * Shadow meshes are not touched: a tree behind the camera still casts a shadow into the view.
+     */
+    cull(camera: Camera): void {
+        camera.updateMatrixWorld()
+        this.frustum_matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+        this.frustum.setFromProjectionMatrix(this.frustum_matrix)
+
+        const keys: string[] = []
+        for (const chunk of this.chunks.values()) {
+            if (!this.chunkInView(chunk)) continue
+            keys.push(Vegetation.key(chunk.cx, chunk.cz))
+        }
+        keys.sort()
+        const signature: string = keys.join(',')
+        if (signature === this.visible_signature) return
+        this.visible_signature = signature
+        this.visible_chunks.clear()
+        for (let i: number = 0; i < keys.length; i++) this.visible_chunks.add(keys[i])
+        this.rebuildCameraMeshes()
+    }
+
+    /** Chunk volume widened by the crown overhang, so a tree on the chunk edge does not pop */
+    private chunkInView(chunk: ChunkVegetation): boolean {
+        const x0: number = chunk.cx * TERRAIN_CHUNK_SIZE - CULL_MARGIN
+        const z0: number = chunk.cz * TERRAIN_CHUNK_SIZE - CULL_MARGIN
+        const x1: number = x0 + TERRAIN_CHUNK_SIZE + CULL_MARGIN * 2
+        const z1: number = z0 + TERRAIN_CHUNK_SIZE + CULL_MARGIN * 2
+        this.chunk_box.min.set(x0, CULL_BOTTOM, z0)
+        this.chunk_box.max.set(x1, CULL_TOP, z1)
+        return this.frustum.intersectsBox(this.chunk_box)
+    }
+
     private generate(cx: number, cz: number): ChunkVegetation {
         const chunk_seed: number = Random.hash(this.seed, cx, cz)
         const size: number = TERRAIN_CHUNK_SIZE
@@ -244,22 +291,35 @@ export class Vegetation {
 
     /** Copies instances of all active chunks into the shared InstancedMesh objects */
     private rebuildInstances(): void {
+        this.rebuildCameraMeshes()
+        for (let l: number = 0; l < this.layers.length; l++) {
+            const layer: VegetationLayer = this.layers[l]
+            if (!layer.cast_shadow) continue
+            for (let v: number = 0; v < layer.variants.length; v++) {
+                layer.shadow_meshes[v] = this.fillMesh(layer.shadow_meshes[v], l, v, SHADOW_RING, false, true, Vegetation.shadowVariant(layer, v))
+            }
+        }
+    }
+
+    /** Camera meshes hold only the chunks inside the view */
+    private rebuildCameraMeshes(): void {
         for (let l: number = 0; l < this.layers.length; l++) {
             const layer: VegetationLayer = this.layers[l]
             for (let v: number = 0; v < layer.variants.length; v++) {
-                layer.meshes[v] = this.fillMesh(layer.meshes[v], l, v, layer.ring, false, layer.variants[v])
-                if (layer.cast_shadow) layer.shadow_meshes[v] = this.fillMesh(layer.shadow_meshes[v], l, v, SHADOW_RING, true, Vegetation.shadowVariant(layer, v))
+                layer.meshes[v] = this.fillMesh(layer.meshes[v], l, v, layer.ring, true, false, layer.variants[v])
             }
         }
     }
 
     /** Fills the mesh with instances from chunks within ring; returns a new mesh if capacity is insufficient */
-    private fillMesh(source_mesh: InstancedMesh, l: number, v: number, ring: number, shadow: boolean, variant: VegetationVariant): InstancedMesh {
+    private fillMesh(source_mesh: InstancedMesh, l: number, v: number, ring: number, view_test: boolean, shadow: boolean, variant: VegetationVariant): InstancedMesh {
         let total: number = 0
         const sources: ChunkVegetation[] = []
         for (const chunk of this.chunks.values()) {
             const chunk_ring: number = Math.max(Math.abs(chunk.cx - this.center_cx), Math.abs(chunk.cz - this.center_cz))
             if (chunk_ring > ring) continue
+            // Before the first cull every chunk is drawn, so loading does not depend on the camera
+            if (view_test && this.visible_signature !== '' && !this.visible_chunks.has(Vegetation.key(chunk.cx, chunk.cz))) continue
             sources.push(chunk)
             total += chunk.matrices[l][v].length / 16
         }

@@ -9,22 +9,20 @@ const MIN_SPEED: number = 2
 const MAX_SPEED: number = 600
 /** One wheel notch changes the speed by this factor */
 const WHEEL_STEP: number = 1.2
-/** Holding Q multiplies the speed */
+/** Holding sprint (Ctrl, like in Minecraft, or Q) multiplies the speed */
 const BOOST: number = 5
-/** How fast the velocity catches up with the keys, 1/s: the flight starts and stops smoothly */
-const RESPONSE: number = 8
 const PITCH_LIMIT: number = Math.PI / 2 - 0.01
 
 /**
- * Spectator camera like in Minecraft: mouse to look, W/S fly where the camera looks,
- * A/D strafe, Space and Shift go straight up and down. Flies through anything
+ * Free flight with Minecraft creative controls: WASD moves on the horizontal plane of the
+ * look direction, Space rises and Shift descends at the full speed on top of that, and
+ * releasing the keys stops at once. The wheel changes the speed. Flies through anything
  */
 export class FreeCamera {
     private camera: PerspectiveCamera
     private yaw: number = 0
     private pitch: number = 0
     private speed: number = BASE_SPEED
-    private velocity: Vector3 = new Vector3()
     private euler: Euler = new Euler(0, 0, 0, 'YXZ')
     private forward: Vector3 = new Vector3()
     private right: Vector3 = new Vector3()
@@ -39,7 +37,6 @@ export class FreeCamera {
         this.euler.setFromQuaternion(this.camera.quaternion, 'YXZ')
         this.yaw = this.euler.y
         this.pitch = this.euler.x
-        this.velocity.set(0, 0, 0)
     }
 
     update(dt: number, input: Input): void {
@@ -51,7 +48,8 @@ export class FreeCamera {
 
         this.euler.set(this.pitch, this.yaw, 0, 'YXZ')
         this.camera.quaternion.setFromEuler(this.euler)
-        this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion)
+        // Flat basis of the heading: looking up does not turn W into a climb
+        this.forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
         this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))
 
         const axis: (positive: boolean, negative: boolean) => number = (positive: boolean, negative: boolean): number =>
@@ -59,15 +57,13 @@ export class FreeCamera {
         const ahead: number = axis(input.isDown('KeyW') || input.isDown('ArrowUp'), input.isDown('KeyS') || input.isDown('ArrowDown'))
         const side: number = axis(input.isDown('KeyD') || input.isDown('ArrowRight'), input.isDown('KeyA') || input.isDown('ArrowLeft'))
         const up: number = axis(input.isDown('Space'), input.isDown('ShiftLeft') || input.isDown('ShiftRight'))
-        this.target.set(0, 0, 0)
-            .addScaledVector(this.forward, ahead)
-            .addScaledVector(this.right, side)
-        this.target.y += up
+        // Diagonal keys share one speed, and the vertical keys add their own full speed on top
+        this.target.set(0, 0, 0).addScaledVector(this.forward, ahead).addScaledVector(this.right, side)
         if (this.target.lengthSq() > 1) this.target.normalize()
-        this.target.multiplyScalar(this.speed * (input.isDown('KeyQ') ? BOOST : 1))
-
-        this.velocity.lerp(this.target, 1 - Math.exp(-RESPONSE * dt))
-        this.camera.position.addScaledVector(this.velocity, dt)
+        this.target.y += up
+        const sprint: boolean = input.isDown('KeyQ') || input.isDown('ControlLeft') || input.isDown('ControlRight')
+        this.target.multiplyScalar(this.speed * (sprint ? BOOST : 1))
+        this.camera.position.addScaledVector(this.target, dt)
         this.camera.updateMatrixWorld()
     }
 }

@@ -6,6 +6,7 @@ import { RoadNetwork } from './RoadNetwork'
 import { RoadRenderer } from './RoadRenderer'
 import { RoadSegment } from './RoadTypes'
 import { TerrainSystem } from './TerrainSystem'
+import { PowerLines } from './PowerLines'
 import { Vegetation, VegetationStats } from './Vegetation'
 import { WorldSurface } from './WorldSurface'
 import { ROAD_GENERATE_AHEAD, ROAD_INFLUENCE_RADIUS } from './WorldConfig'
@@ -32,6 +33,7 @@ export class World {
     readonly vegetation: Vegetation
     private road_renderer: RoadRenderer
     private terrain: TerrainSystem
+    private power_lines: PowerLines
 
     constructor(scene: Scene, assets: AssetLibrary, anisotropy: number, seed: number) {
         const landscape: Landscape = new Landscape(seed)
@@ -41,6 +43,7 @@ export class World {
         this.road_renderer = new RoadRenderer(scene, this.surface, this.materials)
         this.terrain = new TerrainSystem(scene, this.surface, this.materials)
         this.vegetation = new Vegetation(scene, this.surface, this.materials, assets, seed)
+        this.power_lines = new PowerLines(scene, this.surface, this.materials, seed)
 
         // A new road section reshapes the terrain around it, so rebuild the affected chunks
         this.road.onSegmentAdded((segment: RoadSegment): void => {
@@ -67,6 +70,7 @@ export class World {
             await wait()
         }
         this.vegetation.update(center, 100000)
+        this.power_lines.update(0, center, 8)
         on_progress(0.85)
         await wait()
     }
@@ -88,6 +92,7 @@ export class World {
         this.road_renderer.update(center, 3)
         this.terrain.update(center, 4)
         this.vegetation.update(center, 3)
+        this.power_lines.update(along, center, 1)
         this.materials.update(time)
     }
 }

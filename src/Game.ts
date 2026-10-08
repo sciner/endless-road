@@ -604,6 +604,8 @@ export class Game {
         if (free) this.free_camera.update(dt, this.input)
         else if (playing) this.camera_rig.update(dt, this.car.physics, this.world.surface)
         else this.camera_rig.showcase(dt, this.car.physics, this.world.surface)
+        // After the camera has moved: chunks outside the view leave the instance buffers
+        this.world.vegetation.cull(this.camera_rig.camera)
         this.lighting.follow(position, this.car.physics.yaw)
         this.sky.update(this.camera_rig.camera.position, this.time)
         if (!free) this.updateEffects(dt, playing)
